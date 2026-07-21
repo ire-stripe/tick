@@ -1,0 +1,1 @@
+ALTER TABLE public.episodes ADD COLUMN IF NOT EXISTS male_audio_url text;

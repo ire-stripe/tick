@@ -1,0 +1,2 @@
+ALTER TABLE public.articles ADD COLUMN IF NOT EXISTS ticker_source boolean NOT NULL DEFAULT false;
+CREATE INDEX IF NOT EXISTS articles_ticker_source_idx ON public.articles (ticker_source, published_at DESC);

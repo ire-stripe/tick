@@ -1,0 +1,1 @@
+DELETE FROM articles WHERE url ~ '^https?://[^/]+/[a-z0-9-]+$';

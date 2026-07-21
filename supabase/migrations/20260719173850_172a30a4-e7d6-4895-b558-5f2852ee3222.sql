@@ -1,0 +1,1 @@
+DROP POLICY IF EXISTS "briefs public read" ON storage.objects;
