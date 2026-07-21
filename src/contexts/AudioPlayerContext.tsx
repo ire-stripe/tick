@@ -18,6 +18,7 @@ export type PlayerEpisode = {
   languageCode: string;
   date: string;
   duration: number | null;
+  voice?: "female" | "male";
 };
 
 type Ctx = {

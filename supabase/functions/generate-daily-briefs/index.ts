@@ -7,8 +7,6 @@ import { checkCronAuth } from "../_shared/auth.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY")!;
-const GOOGLE_TTS_KEY = Deno.env.get("GOOGLE_CLOUD_TTS_API_KEY") ?? "";
 
 const supabase = createClient(SUPABASE_URL, SERVICE_KEY);
 
@@ -33,6 +31,7 @@ const GEMINI_STYLE_PROMPT =
   "Read as a professional news anchor delivering a morning fintech briefing. Warm, authoritative, and conversational. Speak with a British English accent.";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+type Voice = "female" | "male";
 
 function languagesFor(t: Territory): Language[] {
   return t.languages && t.languages.length > 0 ? t.languages : [{ code: "en", label: "EN" }];
@@ -156,20 +155,37 @@ async function fetchOtherTerritoryHeadlines(
 }
 
 async function generateScript(prompt: string): Promise<string> {
-  const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${LOVABLE_API_KEY}`,
-      "Content-Type": "application/json",
+  const token = await getAccessToken();
+
+  const res = await fetch(
+    "https://aiplatform.googleapis.com/v1/projects/tick-502812/locations/global/publishers/google/models/gemini-2.5-flash:generateContent",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        contents: [{ role: "user", parts: [{ text: prompt }] }],
+        generationConfig: {
+          temperature: 0.7,
+          maxOutputTokens: 4096,
+        },
+      }),
     },
-    body: JSON.stringify({
-      model: "google/gemini-2.5-flash",
-      messages: [{ role: "user", content: prompt }],
-    }),
-  });
-  if (!res.ok) throw new Error(`AI script failed: ${res.status} ${await res.text()}`);
-  const j = await res.json();
-  return j.choices?.[0]?.message?.content?.trim() ?? "";
+  );
+
+  const responseText = await res.text();
+
+  if (!res.ok) {
+    throw new Error(`AI script failed: ${res.status} ${responseText}`);
+  }
+
+  const j = JSON.parse(responseText);
+  return j.candidates?.[0]?.content?.parts
+    ?.map((part: { text?: string }) => part.text ?? "")
+    .join("")
+    .trim() ?? "";
 }
 
 function scriptToPlainText(script: string): string {
@@ -362,12 +378,11 @@ async function synthesizeFull(
   languageCode: string,
   voiceName: string,
 ): Promise<Uint8Array> {
-  const plain = scriptToPlainText(script);
+const plain = scriptToPlainText(script);
   const chunks = chunkText(plain);
-  const audios: Uint8Array[] = [];
-  for (const c of chunks) {
-    audios.push(await synthesizeChunk(c, languageCode, voiceName));
-  }
+  const audios = await Promise.all(
+    chunks.map((c) => synthesizeChunk(c, languageCode, voiceName)),
+  );
   return pcmToWav(concatBytes(audios), 24000);
 }
 
@@ -383,8 +398,66 @@ async function uploadAndSign(path: string, wav: Uint8Array): Promise<string> {
   return signed.signedUrl;
 }
 
-async function processOne(t: Territory, lang: Language, todayIso: string, sinceHours = 24) {
+async function processOne(t: Territory, lang: Language, todayIso: string, sinceHours = 24, voice: Voice = "female") {
   const meta = LANG_META[lang.code] ?? LANG_META.en;
+
+  if (voice === "male") {
+    if (!SERVICE_ACCOUNT_JSON) {
+      throw new Error("GOOGLE_SERVICE_ACCOUNT_JSON not set");
+    }
+
+    const { data: episode, error: episodeErr } = await supabase
+      .from("episodes")
+      .select("script,duration_seconds")
+      .eq("region", t.id)
+      .eq("language_code", lang.code)
+      .eq("date", todayIso)
+      .maybeSingle();
+
+    if (episodeErr) throw episodeErr;
+
+    const script = episode?.script?.trim();
+    if (!script) {
+      throw new Error(
+        `[${t.id}/${lang.code}] voice=male requires an existing episode script for ${todayIso}. Run voice=female first.`,
+      );
+    }
+
+    const { data: existing } = await supabase.storage
+      .from("briefs")
+      .list(todayIso, { limit: 100 });
+
+    const stale = (existing ?? [])
+      .filter((f) => f.name === `${t.id}-${lang.code}-male.wav`)
+      .map((f) => `${todayIso}/${f.name}`);
+
+    if (stale.length) {
+      await supabase.storage.from("briefs").remove(stale);
+    }
+
+    console.log(`[${t.id}/${lang.code}] synthesizing male (Charon) from saved script`);
+    const wav = await synthesizeFull(script, meta.tts_language_code, "Charon");
+    const maleUrl = await uploadAndSign(`${todayIso}/${t.id}-${lang.code}-male.wav`, wav);
+
+    const { error: updateErr } = await supabase
+      .from("episodes")
+      .update({ male_audio_url: maleUrl })
+      .eq("region", t.id)
+      .eq("language_code", lang.code)
+      .eq("date", todayIso);
+
+    if (updateErr) throw updateErr;
+
+    console.log(`[${t.id}/${lang.code}] male saved`);
+
+    return {
+      territory: t.id,
+      lang: lang.code,
+      voice,
+      reusedScript: true,
+      male: true,
+    };
+  }
 
   const since = new Date(Date.now() - sinceHours * 60 * 60 * 1000).toISOString();
   const { data: articles, error } = await supabase
@@ -405,10 +478,11 @@ async function processOne(t: Territory, lang: Language, todayIso: string, sinceH
   const script = await generateScript(prompt);
   if (!script) throw new Error("empty script");
 
-  // Clear any prior day files for this territory/lang so signed URLs don't collide.
+// Clear only the prior female file for this territory/lang so signed URLs don't collide.
+  // Do not remove the male file; male generation runs in a separate invocation.
   const { data: existing } = await supabase.storage.from("briefs").list(todayIso, { limit: 100 });
   const stale = (existing ?? [])
-    .filter((f) => f.name.startsWith(`${t.id}-${lang.code}`))
+    .filter((f) => f.name === `${t.id}-${lang.code}-female.wav`)
     .map((f) => `${todayIso}/${f.name}`);
   if (stale.length) await supabase.storage.from("briefs").remove(stale);
 
@@ -435,9 +509,9 @@ async function processOne(t: Territory, lang: Language, todayIso: string, sinceH
 
   await upsertEpisode({});
 
-  if (SERVICE_ACCOUNT_JSON) {
-    // 1) Female (Leda) — synthesize and persist immediately so today's brief
-    //    becomes playable as soon as it's ready, independent of the male job.
+if (SERVICE_ACCOUNT_JSON) {
+    // Free-tier Edge Functions have a 150s timeout. Generate only one voice per
+    // invocation so script generation + TTS + upload can complete reliably.
     try {
       console.log(`[${t.id}/${lang.code}] synthesizing female (Leda)`);
       const wav = await synthesizeFull(script, meta.tts_language_code, "Leda");
@@ -447,19 +521,6 @@ async function processOne(t: Territory, lang: Language, todayIso: string, sinceH
     } catch (e) {
       console.error(`[${t.id}/${lang.code}] female TTS failed:`, e);
     }
-
-    // 2) Male (Charon) — separate best-effort pass. On timeout / 429 we leave
-    //    male_audio_url null; the row still has female audio for the client.
-    try {
-      await sleep(2000);
-      console.log(`[${t.id}/${lang.code}] synthesizing male (Charon)`);
-      const wav = await synthesizeFull(script, meta.tts_language_code, "Charon");
-      maleUrl = await uploadAndSign(`${todayIso}/${t.id}-${lang.code}-male.wav`, wav);
-      await upsertEpisode({ male_audio_url: maleUrl });
-      console.log(`[${t.id}/${lang.code}] male saved`);
-    } catch (e) {
-      console.error(`[${t.id}/${lang.code}] male TTS failed (will retry later):`, e);
-    }
   } else {
     console.warn("GOOGLE_SERVICE_ACCOUNT_JSON not set — saving script only.");
   }
@@ -467,9 +528,10 @@ async function processOne(t: Territory, lang: Language, todayIso: string, sinceH
   const ids = articles.map((a) => a.id);
   await supabase.from("articles").update({ is_in_brief: true }).in("id", ids);
 
-  return {
+return {
     territory: t.id,
     lang: lang.code,
+    voice,
     articles: ids.length,
     female: !!femaleUrl,
     male: !!maleUrl,
@@ -487,6 +549,19 @@ Deno.serve(async (req) => {
   const url = new URL(req.url);
   const territoryFilter = url.searchParams.get("territory");
   const langFilter = url.searchParams.get("lang");
+
+  const voiceParam = url.searchParams.get("voice") ?? "female";
+  if (voiceParam !== "female" && voiceParam !== "male") {
+    return new Response(
+      JSON.stringify({ error: "Invalid voice. Use voice=female or voice=male." }),
+      {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      },
+    );
+  }
+  const voice = voiceParam as Voice;
+
   const shouldPurge = url.searchParams.get("purge") === "true";
 
   const sinceHours = Number(url.searchParams.get("since_hours") ?? 24);
@@ -506,7 +581,7 @@ Deno.serve(async (req) => {
       : languagesFor(t);
     for (const lang of langs) {
       try {
-        results.push(await processOne(t, lang, todayIso, sinceHours));
+        results.push(await processOne(t, lang, todayIso, sinceHours, voice));
       } catch (e) {
         console.error(`[${t.id}/${lang.code}] error:`, e);
         results.push({ territory: t.id, lang: lang.code, error: String(e) });

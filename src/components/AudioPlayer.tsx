@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import type { Language } from "@/lib/regions";
 import { useAudioPlayer } from "@/contexts/AudioPlayerContext";
 import { AudioProgressBar } from "@/components/AudioProgressBar";
-import { loadSettings } from "@/lib/userSettings";
+import { loadSettings, saveSettings } from "@/lib/userSettings";
 
 type Voice = "female" | "male";
 
@@ -61,6 +61,15 @@ export const AudioPlayer = ({ episodes, languages, regionId, regionName, regionF
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [regionId]);
+  
+  useEffect(() => {
+  if (player.episode && player.episode.regionId === regionId && player.episode.voice) {
+    setVoiceState(player.episode.voice);
+    return;
+  }
+
+  setVoiceState(loadSettings().voice);
+}, [regionId, player.episode]);
 
   // IMPORTANT: do NOT fall back across languages here. If the selected language
   // has no episode row, we intentionally return null so the UI can show
@@ -76,12 +85,12 @@ export const AudioPlayer = ({ episodes, languages, regionId, regionName, regionF
   const date = episode?.date ?? new Date().toISOString();
   const durationHint = episode?.duration_seconds ?? null;
 
-  const [voice, setVoiceState] = useState<Voice>(() => loadSettings().voice);
-  const setVoice = (v: Voice) => {
-    if (v === voice) return;
-    if (v === "male" && !maleUrl) return; // not available yet
-    setVoiceState(v);
-  };
+  const [voice, setVoiceState] = useState<Voice>(() => {
+  if (player.episode && player.episode.regionId === regionId && player.episode.voice) {
+    return player.episode.voice;
+  }
+  return loadSettings().voice;
+});
 
   // Voice fallback within the same language is fine (male → female).
   const audioUrl = voice === "male" ? (maleUrl ?? femaleUrl) : (femaleUrl ?? maleUrl);
@@ -100,22 +109,31 @@ export const AudioPlayer = ({ episodes, languages, regionId, regionName, regionF
   const total = isActive ? player.duration || durationHint || 0 : durationHint || 0;
   const playing = isActive && player.playing;
 
-  // If the resolved URL changes while this episode is the active one (voice toggle mid-play), keep playing.
-  useEffect(() => {
-    if (!audioUrl || !episode) return;
-    if (
-      player.episode &&
-      player.episode.regionId === regionId &&
-      player.episode.languageCode === episode.language_code &&
-      player.episode.audioUrl !== audioUrl
-    ) {
-      player.play({
-        audioUrl, regionId, regionName, regionFlags,
-        languageCode: episode.language_code, date: episode.date, duration: episode.duration_seconds,
-      });
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [audioUrl]);
+  const setVoice = (v: Voice) => {
+  const nextUrl = v === "male" ? maleUrl : femaleUrl;
+
+  // Male may not have been generated yet.
+  if (!nextUrl) return;
+
+  setVoiceState(v);
+  saveSettings({ ...loadSettings(), voice: v });
+
+  // If the current brief is already active, switch voice explicitly because the
+  // user clicked the toggle. Do not rely on a remount/useEffect to change audio.
+  if (isActive && episode) {
+    player.play({
+      audioUrl: nextUrl,
+      regionId,
+      regionName,
+      regionFlags,
+      languageCode: episode.language_code,
+      date: episode.date,
+      duration: episode.duration_seconds,
+      voice: v,
+    });
+  }
+};
+
 
   const toggle = () => {
     if (!audioUrl || !episode) return;
@@ -130,6 +148,7 @@ export const AudioPlayer = ({ episodes, languages, regionId, regionName, regionF
         languageCode: episode.language_code,
         date: episode.date,
         duration: episode.duration_seconds,
+        voice: effectiveVoice,
       });
     }
   };
