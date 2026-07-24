@@ -32,40 +32,50 @@ const Settings = () => {
     "px-3 py-1 rounded-full text-xs font-semibold tracking-wide border transition-colors " +
     (active
       ? "bg-primary text-primary-foreground border-primary"
-      : "bg-transparent text-muted-foreground border-white/15 hover:text-foreground hover:border-white/30");
+      : "bg-card text-muted-foreground border-border hover:text-primary hover:border-primary/40 hover:bg-muted");
+
+  const sectionClass = "rounded-2xl border border-border-subtle bg-card p-6 shadow-sm";
 
   return (
-    <div className="min-h-screen">
-      <header className="border-b border-white/10">
+    <div className="min-h-screen bg-background text-foreground">
+      <header className="border-b border-border bg-card">
         <div className="max-w-2xl mx-auto flex items-center justify-between px-4 py-4">
           <Link to="/" className="text-sm text-muted-foreground hover:text-primary transition-colors">
             ← Globe
           </Link>
-          <div className="text-sm font-semibold">Settings</div>
+          <div className="font-serifDisplay text-2xl leading-none text-foreground">
+            Settings
+          </div>
         </div>
       </header>
 
       <main className="max-w-2xl mx-auto px-4 py-8 space-y-8">
-        <section className="glass rounded-2xl p-6">
-          <h2 className="text-lg font-semibold mb-1">Your Regions</h2>
+        <section className={sectionClass}>
+          <h2 className="font-serifDisplay text-2xl leading-none mb-2 text-foreground">
+            Your Regions
+          </h2>
           <p className="text-sm text-muted-foreground mb-4">
             Only checked regions appear on the globe. Uncheck to hide.
           </p>
           <div className="space-y-3">
             {REGION_IDS.map((id) => (
-              <label key={id} className="flex items-center gap-3 cursor-pointer">
+              <label key={id} className="flex items-center gap-3 cursor-pointer text-foreground">
                 <Checkbox
                   checked={regions.includes(id)}
                   onCheckedChange={() => toggle(id)}
                 />
-                <span className="text-sm">{REGIONS[id].name} <span className="ml-1">{REGIONS[id].flags}</span></span>
+                <span className="text-sm">
+                  {REGIONS[id].name} <span className="ml-1">{REGIONS[id].flags}</span>
+                </span>
               </label>
             ))}
           </div>
         </section>
 
-        <section className="glass rounded-2xl p-6">
-          <h2 className="text-lg font-semibold mb-1">Preferred voice</h2>
+        <section className={sectionClass}>
+          <h2 className="font-serifDisplay text-2xl leading-none mb-2 text-foreground">
+            Preferred voice
+          </h2>
           <p className="text-sm text-muted-foreground mb-4">
             Your default voice for Morning Briefs.
           </p>
@@ -79,8 +89,10 @@ const Settings = () => {
           </div>
         </section>
 
-        <section className="glass rounded-2xl p-6">
-          <h2 className="text-lg font-semibold mb-1">Preferred language</h2>
+        <section className={sectionClass}>
+          <h2 className="font-serifDisplay text-2xl leading-none mb-2 text-foreground">
+            Preferred language
+          </h2>
           <p className="text-sm text-muted-foreground mb-4">
             Your default language for Morning Briefs. Only applies to regions that support it.
           </p>
@@ -94,10 +106,12 @@ const Settings = () => {
           </div>
         </section>
 
-        <section className="glass rounded-2xl p-6 opacity-60">
+        <section className={`${sectionClass} opacity-70`}>
           <div className="flex items-start justify-between gap-4">
             <div>
-              <h2 className="text-lg font-semibold mb-1">Slack notifications</h2>
+              <h2 className="font-serifDisplay text-2xl leading-none mb-2 text-foreground">
+                Slack notifications
+              </h2>
               <p className="text-sm text-muted-foreground">
                 Coming soon. Daily briefs delivered to your Slack channel each morning.
               </p>
@@ -107,7 +121,9 @@ const Settings = () => {
         </section>
 
         <div className="flex justify-end">
-          <Button onClick={save}>Save preferences</Button>
+          <Button onClick={save} className="bg-primary text-primary-foreground hover:bg-primary-hover">
+            Save preferences
+          </Button>
         </div>
       </main>
     </div>

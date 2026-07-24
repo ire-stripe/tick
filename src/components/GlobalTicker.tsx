@@ -174,9 +174,11 @@ export const GlobalTicker = ({ headlines }: { headlines: Headline[] }) => {
   };
 
   return (
-    <div className="ticker-perspective border-t border-white/10 bg-card/40">
+    <div className="ticker-perspective border-t border-black bg-ticker text-ticker-foreground">
       <div className="ticker-tilt max-w-7xl mx-auto flex items-center gap-4 px-4 py-3">
-        <span className="shrink-0 font-bold text-xs tracking-widest text-primary">BREAKING NEWS</span>
+        <span className="shrink-0 font-bold text-xs tracking-widest text-ticker-label">
+          BREAKING NEWS
+        </span>
         <div
           className="flex-1 overflow-hidden touch-pan-y select-none"
           style={{ cursor: isDragging ? "grabbing" : "grab" }}
@@ -190,14 +192,14 @@ export const GlobalTicker = ({ headlines }: { headlines: Headline[] }) => {
             {loop.map((h, i) => {
               const content = (
                 <>
-                  {h.is_breaking && <span className="text-destructive mr-1.5">🔴</span>}
+                  {h.is_breaking && <span className="text-ticker-label mr-1.5">🔴</span>}
                   {h.title}
-                  <span className="text-muted-foreground/50 ml-8">·</span>
+                  <span className="text-white/35 ml-8">·</span>
                 </>
               );
               const className = isFallback
-                ? "text-sm text-muted-foreground"
-                : "text-sm text-foreground/90 hover:text-primary transition-colors";
+                ? "text-sm text-white/65"
+                : "text-sm text-white/90 hover:text-white transition-colors";
               return isFallback ? (
                 <span key={`${h.id}-${i}`} className={className}>{content}</span>
               ) : (

@@ -3,7 +3,6 @@ import { Link } from "react-router-dom";
 import { Settings as SettingsIcon } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Globe3D } from "@/components/Globe3D";
-import { StarField } from "@/components/StarField";
 import { GlobalTicker } from "@/components/GlobalTicker";
 import { RegionPanel } from "@/components/RegionPanel";
 import { MiniPlayer } from "@/components/MiniPlayer";
@@ -20,7 +19,6 @@ const Index = () => {
   const [activeRegion, setActiveRegion] = useState<RegionId | null>(null);
   const [panelRegion, setPanelRegion] = useState<RegionId | null>(null);
   const [panelOpen, setPanelOpen] = useState(false);
-  const [burstKey, setBurstKey] = useState(0);
   const [hasSelected, setHasSelected] = useState(false);
   const [enabledRegions, setEnabledRegions] = useState<string[]>(() => loadSettings().regions);
   const { episode: activeEpisode } = useAudioPlayer();
@@ -33,10 +31,6 @@ const Index = () => {
   }, []);
 
 
-  // Trigger a shimmer burst on the star field when a region is opened or switched.
-  useEffect(() => {
-    if (activeRegion) setBurstKey((k) => k + 1);
-  }, [activeRegion]);
 
   useEffect(() => {
     const load = async () => {
@@ -133,31 +127,27 @@ const Index = () => {
   };
 
   return (
-    <div className="h-screen flex flex-col overflow-hidden relative">
-      <StarField burstKey={burstKey} />
+    <div className="h-screen flex flex-col overflow-hidden relative bg-background text-foreground">
       <Link
         to="/settings"
         aria-label="Settings"
-        className="fixed z-[60] h-9 w-9 rounded-full flex items-center justify-center hover:bg-white/10 text-muted-foreground hover:text-primary transition-colors"
+        className="fixed z-[60] h-9 w-9 rounded-full flex items-center justify-center text-muted-foreground hover:text-primary hover:bg-black/5 transition-colors"
         style={{ top: 16, right: 20 }}
       >
         <SettingsIcon className="h-5 w-5" />
       </Link>
 
-      <header className="pt-4 pb-2 text-center shrink-0 relative z-10">
-        <h1
-          className="text-4xl md:text-5xl font-bold leading-none lowercase"
-          style={{ fontFamily: "'Space Grotesk', 'Inter', sans-serif", letterSpacing: "0" }}
-        >
+      <header className="shrink-0 relative z-20 border-b border-border bg-card/95 px-4 py-4 text-center">
+        <h1 className="font-serifDisplay text-5xl md:text-6xl leading-none lowercase text-foreground">
           tick.
         </h1>
-        <p className="mt-2 text-[11px] text-foreground/80 tracking-[0.15em]">
+        <p className="mt-2 text-[11px] text-muted-foreground tracking-[0.15em]">
           Get the latest fintech news in 5 minutes.
         </p>
         <p
           className="text-[10px] text-muted-foreground tracking-[0.15em] mt-0.5"
           style={{
-            opacity: hasSelected ? 0 : 0.6,
+            opacity: hasSelected ? 0 : 0.75,
             transition: "opacity 500ms ease-out",
           }}
         >
@@ -165,24 +155,35 @@ const Index = () => {
         </p>
       </header>
 
-      <main className="flex-1 min-h-0 flex items-center justify-center px-4 relative z-10">
-        <Globe3D
-          counts={counts}
-          activeRegion={activeRegion}
-          onSelectRegion={handleSelectRegion}
-          onCloseRegion={handleClose}
-          ambientHeadlines={ambient}
-          enabledRegions={enabledRegions}
-        />
+      <main className="flex-1 min-h-0 flex items-center justify-center px-4 py-4 relative z-10 bg-background">
+        <div className="relative w-full max-w-6xl flex-1 min-h-[420px]">
+          <div
+            className="absolute left-1/2 top-1/2 h-[88%] w-[min(96vw,980px)] -translate-x-1/2 -translate-y-1/2 rounded-[999px]"
+            style={{
+              background:
+                "radial-gradient(ellipse at center, rgba(11,20,38,0.98) 0%, rgba(11,20,38,0.92) 42%, rgba(11,20,38,0.55) 68%, rgba(250,250,247,0) 100%)",
+              boxShadow: "0 30px 90px rgba(11, 20, 38, 0.28)",
+            }}
+          />
+          <div className="relative h-full w-full">
+            <Globe3D
+              counts={counts}
+              activeRegion={activeRegion}
+              onSelectRegion={handleSelectRegion}
+              onCloseRegion={handleClose}
+              ambientHeadlines={ambient}
+              enabledRegions={enabledRegions}
+            />
+          </div>
+        </div>
       </main>
 
-      <div className="shrink-0 relative z-10">
-        <GlobalTicker headlines={headlines} />
-        <p className="text-center text-[10px] text-muted-foreground py-1.5">
+      <div className="shrink-0 relative z-10 bg-background">
+        <p className="text-center text-[10px] text-muted-foreground py-1.5 border-t border-border-subtle">
           Last refreshed: {minsAgo} min ago
         </p>
+        <GlobalTicker headlines={headlines} />
       </div>
-
 
       {panelRegion && (
         <RegionPanel regionId={panelRegion} open={panelOpen} onClose={handleClose} />
@@ -192,7 +193,6 @@ const Index = () => {
         visible={!!activeEpisode && (!panelOpen || activeEpisode.regionId !== panelRegion)}
         onExpand={(id) => handleSelectRegion(id as RegionId)}
       />
-
     </div>
   );
 };

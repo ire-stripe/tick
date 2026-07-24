@@ -36,11 +36,11 @@ export const MiniPlayer = ({ visible, onExpand }: Props) => {
         <div
           className="rounded-2xl px-4 py-3 flex items-center gap-3"
           style={{
-            background: "rgba(17, 29, 46, 0.95)",
+            background: "rgba(255, 255, 255, 0.96)",
             backdropFilter: "blur(20px)",
             WebkitBackdropFilter: "blur(20px)",
-            border: "1px solid rgba(255,255,255,0.08)",
-            boxShadow: "0 12px 40px rgba(0,0,0,0.5)",
+            border: "1px solid var(--border-default)",
+            boxShadow: "0 16px 44px rgba(26,26,26,0.14)",
           }}
         >
           <button
@@ -79,7 +79,7 @@ export const MiniPlayer = ({ visible, onExpand }: Props) => {
               stop();
             }}
             aria-label="Close mini player"
-            className="h-7 w-7 shrink-0 rounded-full flex items-center justify-center hover:bg-white/10 text-muted-foreground hover:text-foreground transition-colors"
+            className="h-7 w-7 shrink-0 rounded-full flex items-center justify-center hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
           >
             <X className="h-3.5 w-3.5" />
           </button>

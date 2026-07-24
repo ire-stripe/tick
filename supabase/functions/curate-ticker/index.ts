@@ -5,7 +5,6 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 import { checkCronAuth } from "../_shared/auth.ts";
 
 
-const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY")!;
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
@@ -13,27 +12,169 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
 async function callGemini(prompt: string): Promise<string | null> {
   try {
-    const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const rawServiceAccount = Deno.env.get("GOOGLE_SERVICE_ACCOUNT_JSON");
+    if (!rawServiceAccount) {
+      console.warn("Vertex AI failed: GOOGLE_SERVICE_ACCOUNT_JSON not set");
+      return null;
+    }
+
+    const sa = JSON.parse(rawServiceAccount) as {
+      client_email?: string;
+      private_key?: string;
+      project_id?: string;
+      token_uri?: string;
+    };
+
+    if (!sa.client_email || !sa.private_key || !sa.project_id) {
+      console.warn("Vertex AI failed: service account JSON missing client_email, private_key, or project_id");
+      return null;
+    }
+
+    const base64url = (input: string | ArrayBuffer | Uint8Array): string => {
+      let bytes: Uint8Array;
+
+      if (typeof input === "string") {
+        bytes = new TextEncoder().encode(input);
+      } else if (input instanceof Uint8Array) {
+        bytes = input;
+      } else {
+        bytes = new Uint8Array(input);
+      }
+
+      let binary = "";
+      for (const byte of bytes) {
+        binary += String.fromCharCode(byte);
+      }
+
+      return btoa(binary)
+        .replace(/\+/g, "-")
+        .replace(/\//g, "_")
+        .replace(/=+$/g, "");
+    };
+
+    const pemToArrayBuffer = (pem: string): ArrayBuffer => {
+      const b64 = pem
+        .replace("-----BEGIN PRIVATE KEY-----", "")
+        .replace("-----END PRIVATE KEY-----", "")
+        .replace(/\s/g, "");
+
+      const binary = atob(b64);
+      const bytes = new Uint8Array(binary.length);
+
+      for (let i = 0; i < binary.length; i++) {
+        bytes[i] = binary.charCodeAt(i);
+      }
+
+      const buffer = new ArrayBuffer(bytes.length);
+      new Uint8Array(buffer).set(bytes);
+      return buffer;
+    };
+
+    const tokenUri = sa.token_uri ?? "https://oauth2.googleapis.com/token";
+    const now = Math.floor(Date.now() / 1000);
+
+    const jwtHeader = {
+      alg: "RS256",
+      typ: "JWT",
+    };
+
+    const jwtClaimSet = {
+      iss: sa.client_email,
+      scope: "https://www.googleapis.com/auth/cloud-platform",
+      aud: tokenUri,
+      iat: now,
+      exp: now + 3600,
+    };
+
+    const unsignedJwt = `${base64url(JSON.stringify(jwtHeader))}.${base64url(
+      JSON.stringify(jwtClaimSet),
+    )}`;
+
+    const privateKey = await crypto.subtle.importKey(
+      "pkcs8",
+      pemToArrayBuffer(sa.private_key),
+      {
+        name: "RSASSA-PKCS1-v1_5",
+        hash: "SHA-256",
+      },
+      false,
+      ["sign"],
+    );
+
+    const signature = await crypto.subtle.sign(
+      "RSASSA-PKCS1-v1_5",
+      privateKey,
+      new TextEncoder().encode(unsignedJwt),
+    );
+
+    const signedJwt = `${unsignedJwt}.${base64url(signature)}`;
+
+    const tokenRes = await fetch(tokenUri, {
       method: "POST",
       headers: {
-        "Content-Type": "application/json",
-        "Lovable-API-Key": LOVABLE_API_KEY,
+        "Content-Type": "application/x-www-form-urlencoded",
       },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
-        messages: [{ role: "user", content: prompt }],
+      body: new URLSearchParams({
+        grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
+        assertion: signedJwt,
       }),
       signal: AbortSignal.timeout(30000),
     });
-    if (!res.ok) {
-      const t = await res.text();
-      console.warn(`AI gateway ${res.status}: ${t.slice(0, 300)}`);
+
+    const tokenText = await tokenRes.text();
+
+    if (!tokenRes.ok) {
+      console.warn(`Vertex AI token exchange ${tokenRes.status}: ${tokenText.slice(0, 300)}`);
       return null;
     }
-    const data = await res.json();
-    return data?.choices?.[0]?.message?.content?.trim() ?? null;
+
+    const tokenData = JSON.parse(tokenText);
+    const accessToken = tokenData.access_token;
+
+    if (!accessToken) {
+      console.warn("Vertex AI token exchange failed: response missing access_token");
+      return null;
+    }
+
+    const vertexUrl =
+      `https://europe-west1-aiplatform.googleapis.com/v1/projects/${sa.project_id}/locations/europe-west1/publishers/google/models/gemini-2.5-flash:generateContent`;
+
+    const res = await fetch(vertexUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({
+        contents: [
+          {
+            role: "user",
+            parts: [{ text: prompt }],
+          },
+        ],
+        generationConfig: {
+          temperature: 0.2,
+          maxOutputTokens: 2048,
+        },
+      }),
+      signal: AbortSignal.timeout(30000),
+    });
+
+    const responseText = await res.text();
+
+    if (!res.ok) {
+      console.warn(`Vertex AI ${res.status}: ${responseText.slice(0, 300)}`);
+      return null;
+    }
+
+    const data = JSON.parse(responseText);
+
+    return data?.candidates?.[0]?.content?.parts
+      ?.map((part: { text?: string }) => part.text ?? "")
+      .join("")
+      .trim() || null;
   } catch (e) {
-    console.warn("AI gateway failed", (e as Error).message);
+    console.warn("Vertex AI failed", (e as Error).message);
     return null;
   }
 }
@@ -139,8 +280,10 @@ Deno.serve(async (req) => {
 
 
     // 3. Ask Gemini to pick the globally significant stories + breaking flags.
+    // Use stable numbered indices instead of UUIDs because Gemini can hallucinate
+    // slightly-wrong IDs. We map 1-based indices back to real article IDs below.
     const listText = candidates
-      .map((a: any) => `- id=${a.id} | ${a.title}${a.summary ? " — " + a.summary.slice(0, 200) : ""}`)
+      .map((a: any, i: number) => `${i + 1}. ${a.title}${a.summary ? " — " + a.summary.slice(0, 200) : ""}`)
       .join("\n");
 
     const prompt =
@@ -160,8 +303,9 @@ Deno.serve(async (req) => {
       `- Stock market or trading news (unless it's a fintech IPO)\n` +
       `- Political news that isn't directly about payment regulation\n` +
       `- Anything a payments sales rep couldn't reference in a customer conversation\n\n` +
-      `Return ONLY the IDs of qualifying articles as a JSON array of objects with shape ` +
-      `[{"id":"<article id>","breaking":true|false}, ...]. Flag "breaking":true for stories with ` +
+      `Return ONLY the NUMBERS of qualifying articles as a JSON array of objects with shape ` +
+      `[{"n":1,"breaking":true}, {"n":3,"breaking":false}, ...]. The "n" value must be the ` +
+      `number shown before the article in the list below. Flag "breaking":true for stories with ` +
       `major breaking-news significance. No prose, no markdown. If fewer than 3 articles qualify, ` +
       `return an empty array [] — do NOT lower the bar.\n\n` +
       `Articles:\n${listText}`;
@@ -170,17 +314,30 @@ Deno.serve(async (req) => {
     console.log("Gemini raw:", raw?.slice(0, 500));
     const parsed = raw ? extractJsonArray(raw) : null;
 
-    const candidateMap = new Map(candidates.map((c: any) => [c.id, c]));
     const selected: { id: string; breaking: boolean }[] = [];
+    const seenSelectedIds = new Set<string>();
+
     if (parsed) {
       for (const item of parsed) {
         if (!item) continue;
-        const id = typeof item === "string" ? item : item.id;
-        if (typeof id !== "string") continue;
-        const cand = candidateMap.get(id);
+
+        const n =
+          typeof item === "number"
+            ? item
+            : typeof item === "string"
+              ? Number.parseInt(item, 10)
+              : Number.parseInt(String(item.n), 10);
+
+        if (!Number.isInteger(n) || n < 1 || n > candidates.length) continue;
+
+        const cand = candidates[n - 1];
         if (!cand || !isEnglish(cand)) continue;
+        if (seenSelectedIds.has(cand.id)) continue;
+
         const breaking = typeof item === "object" && !!item.breaking;
-        selected.push({ id, breaking });
+        selected.push({ id: cand.id, breaking });
+        seenSelectedIds.add(cand.id);
+
         if (selected.length >= 8) break;
       }
     }

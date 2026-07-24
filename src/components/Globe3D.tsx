@@ -19,19 +19,38 @@ const COUNTRIES_URL =
 const DEFAULT_ALT = 2.5;
 const FOCUS_ALT = 0.9;
 
-type PointDatum = {
-  id: RegionId;
-  name: string;
-  flags: string;
-  lat: number;
-  lng: number;
-  count: number;
+const EXTRA_TERRITORY_COUNTRIES: Record<string, string[]> = {
+  benelux: ["lu"],
+  "middle-east": ["om", "kw", "qa", "bh", "jo"],
+  nordics: ["is"],
+};
+
+const ADMIN_NAME_TO_TERRITORY: Record<string, string> = {
+  Norway: "nordics",
+  France: "france",
+  "Northern Cyprus": "middle-east",
+  Kosovo: "cee",
+  Somaliland: "middle-east",
+};
+
+type CountryFeature = {
+  properties?: {
+    ISO_A2?: string;
+    [key: string]: any;
+  };
+  _territoryId?: RegionId | null;
+  [key: string]: any;
 };
 
 type LabelDatum = {
   text: string;
   lat: number;
   lng: number;
+};
+
+type TooltipPos = {
+  x: number;
+  y: number;
 };
 
 export const Globe3D = ({
@@ -46,19 +65,73 @@ export const Globe3D = ({
     () => (enabledRegions ? new Set(enabledRegions) : null),
     [enabledRegions],
   );
+
   const containerRef = useRef<HTMLDivElement>(null);
   const globeRef = useRef<GlobeMethods | undefined>(undefined);
   const [size, setSize] = useState({ w: 0, h: 0 });
-  const [countries, setCountries] = useState<any>({ features: [] });
+  const [countries, setCountries] = useState<CountryFeature[]>([]);
   const [ready, setReady] = useState(false);
+  const [hoveredTerritory, setHoveredTerritory] = useState<RegionId | null>(null);
+  const [tooltipPos, setTooltipPos] = useState<TooltipPos | null>(null);
+  const [animFrame, setAnimFrame] = useState(0);
   const resumeTimer = useRef<number | null>(null);
 
-  // Keep the latest select handler in a ref so the memoized htmlElement
-  // callback can call it without being invalidated on every parent render.
+  // Keep the latest select handler in a ref so globe callbacks do not need to be
+  // invalidated on every parent render.
   const onSelectRef = useRef(onSelectRegion);
   useEffect(() => {
     onSelectRef.current = onSelectRegion;
   }, [onSelectRegion]);
+
+  const territoryIndexById = useMemo(() => {
+    const m = new Map<string, number>();
+    ACTIVE_TERRITORIES.forEach((t, i) => m.set(t.id, i));
+    return m;
+  }, []);
+
+  const countryToTerritory = useMemo(() => {
+    const m = new Map<string, RegionId>();
+
+    for (const t of ACTIVE_TERRITORIES) {
+      if (enabledSet && !enabledSet.has(t.id)) continue;
+
+      for (const code of t.gnews_countries ?? []) {
+        m.set(code.toLowerCase(), t.id);
+      }
+
+      for (const code of EXTRA_TERRITORY_COUNTRIES[t.id] ?? []) {
+        m.set(code.toLowerCase(), t.id);
+      }
+    }
+
+    return m;
+  }, [enabledSet]);
+
+  const polygonData = useMemo(
+    () =>
+      countries.map((feature) => {
+        const iso = feature.properties?.ISO_A2?.toLowerCase();
+        let territoryId: RegionId | null = null;
+
+        if (iso && iso !== "-99") {
+          territoryId = countryToTerritory.get(iso) ?? null;
+        } else {
+          // Fallback: match by ADMIN name for countries with broken ISO codes.
+          const admin = feature.properties?.ADMIN;
+          if (admin) {
+            territoryId = ADMIN_NAME_TO_TERRITORY[admin] ?? null;
+          }
+        }
+
+        // Only include if territory is enabled.
+        if (territoryId && enabledSet && !enabledSet.has(territoryId)) {
+          territoryId = null;
+        }
+
+        return { ...feature, _territoryId: territoryId };
+      }),
+    [countries, countryToTerritory, enabledSet],
+  );
 
   useLayoutEffect(() => {
     const el = containerRef.current;
@@ -72,19 +145,36 @@ export const Globe3D = ({
 
   useEffect(() => {
     let cancelled = false;
+
     fetch(COUNTRIES_URL)
       .then((r) => r.json())
-      .then((d) => !cancelled && setCountries(d))
+      .then((d) => {
+        if (cancelled) return;
+        setCountries((d.features ?? []) as CountryFeature[]);
+      })
       .catch(() => {});
+
     return () => {
       cancelled = true;
     };
+  }, []);
+
+  // Re-render the globe color functions often enough for the subtle territory
+  // border pulse. This is intentionally lightweight: only territory polygons use
+  // animated stroke color.
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      setAnimFrame((n) => n + 1);
+    }, 80);
+
+    return () => window.clearInterval(interval);
   }, []);
 
   // Init controls / auto-rotate once globe ready
   useEffect(() => {
     const g = globeRef.current;
     if (!g) return;
+
     const controls: any = g.controls();
     controls.autoRotate = !activeRegion;
     controls.autoRotateSpeed = 0.3;
@@ -94,10 +184,12 @@ export const Globe3D = ({
     controls.rotateSpeed = 0.9;
     controls.enableDamping = true;
     controls.dampingFactor = 0.08;
+
     const stop = () => {
       controls.autoRotate = false;
       if (resumeTimer.current) window.clearTimeout(resumeTimer.current);
     };
+
     controls.addEventListener("start", stop);
     return () => controls.removeEventListener("start", stop);
   }, [ready, activeRegion]);
@@ -106,7 +198,9 @@ export const Globe3D = ({
   useEffect(() => {
     const g = globeRef.current;
     if (!g) return;
+
     const controls: any = g.controls();
+
     if (activeRegion) {
       const r = REGIONS[activeRegion];
       controls.autoRotate = false;
@@ -123,28 +217,11 @@ export const Globe3D = ({
 
   // Fade-in once loaded
   useEffect(() => {
-    if (size.w > 0 && countries.features?.length) {
+    if (size.w > 0 && countries.length) {
       const t = window.setTimeout(() => setReady(true), 60);
       return () => window.clearTimeout(t);
     }
-  }, [size.w, countries]);
-
-  // Memoize points so react-globe.gl doesn't rebuild DOM elements on every
-  // parent re-render (which was killing tooltip hover state during playback).
-  const points: PointDatum[] = useMemo(
-    () =>
-      ACTIVE_TERRITORIES
-        .filter((t) => !enabledSet || enabledSet.has(t.id))
-        .map((t) => ({
-          id: t.id,
-          name: t.name,
-          flags: t.flags,
-          lat: t.lat,
-          lng: t.lng,
-          count: counts[t.id] ?? 0,
-        })),
-    [counts, enabledSet],
-  );
+  }, [size.w, countries.length]);
 
   const labels: LabelDatum[] = useMemo(
     () => [
@@ -154,7 +231,24 @@ export const Globe3D = ({
     [],
   );
 
-  const htmlData = useMemo(() => [...points, ...labels], [points, labels]);
+  const htmlElement = useCallback((d: any) => {
+    const l = d as LabelDatum;
+    const el = document.createElement("div");
+
+    el.setAttribute("data-coming-soon", "true");
+    el.style.pointerEvents = "none";
+    el.style.transform = "translate(-50%, -50%)";
+    el.style.color = "hsl(215 15% 55%)";
+    el.style.fontSize = "10px";
+    el.style.letterSpacing = "0.2em";
+    el.style.fontWeight = "600";
+    el.style.whiteSpace = "nowrap";
+    el.style.fontFamily = "Inter,system-ui,sans-serif";
+    el.style.textShadow = "0 1px 6px rgba(0,0,0,0.6)";
+    el.textContent = l.text;
+
+    return el;
+  }, []);
 
   // Arcs computed dynamically from the territories config: connect each
   // territory to its two nearest neighbors, dedup pairs. Memoized with
@@ -168,11 +262,13 @@ export const Globe3D = ({
     };
     const seen = new Set<string>();
     const pairs: Array<[string, string]> = [];
+
     ts.forEach((t) => {
       const others = ts
         .filter((o) => o.id !== t.id)
         .sort((a, b) => dist(t, a) - dist(t, b))
         .slice(0, 2);
+
       others.forEach((o) => {
         const key = [t.id, o.id].sort().join("|");
         if (seen.has(key)) return;
@@ -180,6 +276,7 @@ export const Globe3D = ({
         pairs.push([t.id, o.id]);
       });
     });
+
     return pairs.map(([a, b], i) => ({
       startLat: REGIONS[a].lat,
       startLng: REGIONS[a].lng,
@@ -189,130 +286,133 @@ export const Globe3D = ({
     }));
   }, []);
 
-  const htmlElement = useCallback((d: any) => {
-    const el = document.createElement("div");
-    if ("id" in d) {
-      const p = d as PointDatum;
-      el.setAttribute("data-region-dot", "true");
-      el.style.pointerEvents = "auto";
-      el.style.cursor = "pointer";
-      el.style.transform = "translate(-50%, -50%)";
-      el.innerHTML = `
-        <div style="position:relative;display:flex;align-items:center;justify-content:center;">
-          <div class="region-dot" style="width:8px;height:8px;"></div>
-          <div class="region-tooltip" style="
-            position:absolute;left:50%;transform:translateX(-50%);
-            background:hsl(215 42% 12% / 0.95);border:1px solid hsl(0 0% 100% / 0.1);
-            color:#fff;font-size:11px;padding:4px 8px;border-radius:6px;white-space:nowrap;
-            opacity:0;visibility:hidden;pointer-events:none;transition:opacity 120ms ease;
-            font-family:Inter,system-ui,sans-serif;z-index:9999;
-          ">
-            <span>${p.name} <span style="margin-left:2px">${p.flags}</span> · ${p.count} ${p.count === 1 ? "story" : "stories"}</span>
-            <div class="region-tooltip-caret" style="
-              position:absolute;left:50%;width:8px;height:8px;
-              background:hsl(215 42% 12% / 0.95);
-              border-right:1px solid hsl(0 0% 100% / 0.1);
-              border-bottom:1px solid hsl(0 0% 100% / 0.1);
-            "></div>
-          </div>
-        </div>
-      `;
-      const tip = el.querySelector<HTMLElement>(".region-tooltip");
-      const caret = el.querySelector<HTMLElement>(".region-tooltip-caret");
-      const positionTip = () => {
-        if (!tip || !caret) return;
-        tip.style.top = "";
-        tip.style.bottom = "16px";
-        tip.style.left = "50%";
-        tip.style.transform = "translateX(-50%)";
-        caret.style.top = "";
-        caret.style.bottom = "-5px";
-        caret.style.transform = "translateX(-50%) rotate(45deg)";
-        requestAnimationFrame(() => {
-          const r = tip.getBoundingClientRect();
-          if (r.top < 12) {
-            tip.style.bottom = "";
-            tip.style.top = "16px";
-            caret.style.bottom = "";
-            caret.style.top = "-5px";
-            caret.style.transform = "translateX(-50%) rotate(225deg)";
-          }
-          const vw = window.innerWidth;
-          const r2 = tip.getBoundingClientRect();
-          let shift = 0;
-          if (r2.right > vw - 8) shift = -(r2.right - (vw - 8));
-          else if (r2.left < 8) shift = 8 - r2.left;
-          const labels = document.querySelectorAll<HTMLElement>("[data-coming-soon]");
-          const test = { left: r2.left + shift, right: r2.right + shift, top: r2.top, bottom: r2.bottom };
-          labels.forEach((lab) => {
-            const lr = lab.getBoundingClientRect();
-            const overlap = !(test.right < lr.left || test.left > lr.right || test.bottom < lr.top || test.top > lr.bottom);
-            if (overlap) {
-              const shiftLeft = -(test.right - lr.left + 8);
-              const shiftRight = lr.right - test.left + 8;
-              const extra = Math.abs(shiftLeft) < Math.abs(shiftRight) ? shiftLeft : shiftRight;
-              shift += extra;
-              test.left += extra;
-              test.right += extra;
-            }
-          });
-          if (shift !== 0) {
-            tip.style.transform = `translateX(calc(-50% + ${shift}px))`;
-            caret.style.transform = `translateX(calc(-50% - ${shift}px)) rotate(${caret.style.transform.includes("225") ? "225" : "45"}deg)`;
-          }
-        });
-      };
-      el.addEventListener("mouseenter", () => {
-        if (!tip) return;
-        el.style.zIndex = "9999";
-        tip.style.visibility = "visible";
-        tip.style.opacity = "1";
-        positionTip();
-      });
-      el.addEventListener("mouseleave", () => {
-        if (!tip) return;
-        tip.style.opacity = "0";
-        tip.style.visibility = "hidden";
-        el.style.zIndex = "";
-      });
-      el.addEventListener("click", (ev) => {
-        ev.stopPropagation();
-        onSelectRef.current?.(p.id);
-      });
-    } else {
-      const l = d as LabelDatum;
-      el.setAttribute("data-coming-soon", "true");
-      el.style.pointerEvents = "none";
-      el.style.transform = "translate(-50%, -50%)";
-      el.style.color = "hsl(215 15% 55%)";
-      el.style.fontSize = "10px";
-      el.style.letterSpacing = "0.2em";
-      el.style.fontWeight = "600";
-      el.style.whiteSpace = "nowrap";
-      el.style.fontFamily = "Inter,system-ui,sans-serif";
-      el.style.textShadow = "0 1px 6px rgba(0,0,0,0.6)";
-      el.textContent = l.text;
+  const activeTooltipRegion = hoveredTerritory;
+  const tooltipRegionMeta = activeTooltipRegion ? REGIONS[activeTooltipRegion] : null;
+  const tooltipCount = activeTooltipRegion ? counts[activeTooltipRegion] ?? 0 : 0;
+
+  // Keep tooltip anchored above the territory center while the globe rotates.
+  useEffect(() => {
+    if (!activeTooltipRegion || !tooltipRegionMeta) {
+      setTooltipPos(null);
+      return;
     }
-    return el;
+
+    let raf = 0;
+
+    const update = () => {
+      const g = globeRef.current as any;
+      const el = containerRef.current;
+
+      if (!g || !el) {
+        raf = requestAnimationFrame(update);
+        return;
+      }
+
+      const coords = g.getScreenCoords(tooltipRegionMeta.lat, tooltipRegionMeta.lng, 0.03);
+
+      if (coords) {
+        setTooltipPos({
+          x: Math.max(12, Math.min(size.w - 12, coords.x)),
+          y: Math.max(12, Math.min(size.h - 12, coords.y - 24)),
+        });
+      }
+
+      raf = requestAnimationFrame(update);
+    };
+
+    update();
+
+    return () => {
+      if (raf) cancelAnimationFrame(raf);
+    };
+  }, [activeTooltipRegion, tooltipRegionMeta, size.w, size.h]);
+
+  const isFocusedTerritory = (territoryId?: RegionId | null) =>
+  !!territoryId && (territoryId === hoveredTerritory || territoryId === activeRegion);
+
+  const getPolygonCapColor = (d: any) => {
+    void animFrame; // ensure re-eval on tick
+
+    const territoryId = (d as CountryFeature)._territoryId;
+
+    // Hovered or selected → bright glow
+    if (isFocusedTerritory(territoryId)) {
+      return "rgba(74, 111, 165, 0.25)";
+    }
+
+    // Territory polygon at rest → pulsating fill
+    if (territoryId) {
+      const territoryIndex = territoryIndexById.get(territoryId) ?? 0;
+      const phase = (Date.now() / 3500 + territoryIndex * 0.114) * Math.PI * 2;
+      const opacity = 0.06 + 0.12 * (0.5 + 0.5 * Math.sin(phase));
+      return `rgba(74, 111, 165, ${opacity.toFixed(3)})`;
+    }
+
+    // Non-territory country → static dark
+    return "rgba(26, 42, 63, 0.85)";
+  };
+
+  const getPolygonStrokeColor = (d: any) => {
+    // Read animFrame so React/TS knows this accessor intentionally depends on
+    // the 80ms animation tick. The actual pulse phase still uses Date.now().
+    void animFrame;
+
+    const territoryId = (d as CountryFeature)._territoryId;
+
+    if (!territoryId) {
+      return "#2a3a5f";
+    }
+
+    if (isFocusedTerritory(territoryId)) {
+      return "rgba(74, 111, 165, 0.9)";
+    }
+
+    const territoryIndex = territoryIndexById.get(territoryId) ?? 0;
+    const phase = (Date.now() / 3500 + territoryIndex * 0.114) * Math.PI * 2;
+    const opacity = 0.08 + 0.17 * (0.5 + 0.5 * Math.sin(phase));
+
+    return `rgba(74, 111, 165, ${opacity.toFixed(3)})`;
+  };
+
+  const getPolygonAltitude = (d: any) => {
+    const territoryId = (d as CountryFeature)._territoryId;
+    return isFocusedTerritory(territoryId) ? 0.012 : 0.005;
+  };
+
+  const handlePolygonHover = useCallback((polygon: any | null) => {
+    const territoryId = (polygon as CountryFeature | null)?._territoryId ?? null;
+    setHoveredTerritory(territoryId);
+  }, []);
+
+  const handlePolygonClick = useCallback((polygon: any | null) => {
+    const territoryId = (polygon as CountryFeature | null)?._territoryId ?? null;
+    if (!territoryId) return;
+
+    onSelectRef.current?.(territoryId);
   }, []);
 
   const pressRef = useRef<{ x: number; y: number; t: number } | null>(null);
+
   const handlePointerDown = (e: React.PointerEvent) => {
     if (!activeRegion) return;
     pressRef.current = { x: e.clientX, y: e.clientY, t: Date.now() };
   };
+
   const handlePointerUp = (e: React.PointerEvent) => {
     if (!activeRegion) return;
+
     const p = pressRef.current;
     pressRef.current = null;
     if (!p) return;
+
     const dx = e.clientX - p.x;
     const dy = e.clientY - p.y;
     const dist = Math.hypot(dx, dy);
     const elapsed = Date.now() - p.t;
+
     if (dist > 5 || elapsed > 200) return;
-    const target = e.target as HTMLElement;
-    if (target.closest("[data-region-dot]")) return;
+    if (hoveredTerritory) return;
+
     onCloseRegion?.();
   };
 
@@ -330,6 +430,7 @@ export const Globe3D = ({
     const applyDelta = (dLat: number, dLng: number) => {
       const g = globeRef.current;
       if (!g) return;
+
       const pov = g.pointOfView();
       g.pointOfView(
         {
@@ -345,22 +446,27 @@ export const Globe3D = ({
       // decay
       vel.lat *= 0.92;
       vel.lng *= 0.92;
+
       if (Math.abs(vel.lat) < 0.002 && Math.abs(vel.lng) < 0.002) {
         raf = 0;
         return;
       }
+
       // Only run inertia after user has stopped scrolling for >80ms — otherwise
       // wheel deltas double-apply and the globe jitters.
       if (performance.now() - lastWheelTs > 80) {
         applyDelta(vel.lat, vel.lng);
       }
+
       raf = requestAnimationFrame(tick);
     };
 
     const onWheel = (e: WheelEvent) => {
       if (e.ctrlKey) return; // pinch-zoom → let OrbitControls handle
+
       e.preventDefault();
       e.stopPropagation();
+
       const controls: any = globeRef.current?.controls();
       if (controls) controls.autoRotate = false;
 
@@ -369,18 +475,21 @@ export const Globe3D = ({
       const k = 0.12;
       const dLng = e.deltaX * k;
       const dLat = -e.deltaY * k;
+
       applyDelta(dLat, dLng);
 
       // Blend into velocity for momentum after the gesture ends.
       vel.lat = vel.lat * 0.5 + dLat * 0.5;
       vel.lng = vel.lng * 0.5 + dLng * 0.5;
       lastWheelTs = performance.now();
+
       if (!raf) raf = requestAnimationFrame(tick);
     };
 
     // Capture phase + non-passive so we can preventDefault ahead of
     // OrbitControls' own wheel listener.
     el.addEventListener("wheel", onWheel, { passive: false, capture: true });
+
     return () => {
       el.removeEventListener("wheel", onWheel, { capture: true } as any);
       if (raf) cancelAnimationFrame(raf);
@@ -397,6 +506,7 @@ export const Globe3D = ({
         opacity: ready ? 1 : 0,
         transition: "opacity 500ms ease-out",
         touchAction: "none",
+        cursor: hoveredTerritory ? "pointer" : "grab",
       }}
     >
       {size.w > 0 && (
@@ -416,11 +526,14 @@ export const Globe3D = ({
               shininess: 4,
             })
           }
-          polygonsData={countries.features}
-          polygonCapColor={() => "rgba(26, 42, 63, 0.85)"}
+          polygonsData={polygonData}
+          polygonCapColor={getPolygonCapColor}
           polygonSideColor={() => "rgba(10, 22, 40, 0.6)"}
-          polygonStrokeColor={() => "#2a3a5f"}
-          polygonAltitude={0.005}
+          polygonStrokeColor={getPolygonStrokeColor}
+          polygonAltitude={getPolygonAltitude}
+          polygonsTransitionDuration={0}
+          onPolygonHover={handlePolygonHover}
+          onPolygonClick={handlePolygonClick}
           arcsData={arcs}
           arcColor={() => "rgba(74, 111, 165, 0.22)"}
           arcStroke={0.4}
@@ -430,7 +543,7 @@ export const Globe3D = ({
           arcDashInitialGap={(d: any) => d.dashInitialGap}
           arcDashAnimateTime={5000}
           arcsTransitionDuration={0}
-          htmlElementsData={htmlData}
+          htmlElementsData={labels}
           htmlLat={(d: any) => d.lat}
           htmlLng={(d: any) => d.lng}
           htmlAltitude={0.01}
@@ -442,6 +555,30 @@ export const Globe3D = ({
           }}
         />
       )}
+
+      {tooltipRegionMeta && tooltipPos && (
+        <div
+          className="pointer-events-none absolute z-50 rounded-md border border-border bg-slate-950/95 px-2 py-1 text-[11px] text-white shadow-lg"
+          style={{
+            left: tooltipPos.x,
+            top: tooltipPos.y,
+            transform: "translate(-50%, -100%)",
+            fontFamily: "Inter, system-ui, sans-serif",
+            whiteSpace: "nowrap",
+          }}
+        >
+          <span>
+            {tooltipRegionMeta.name}{" "}
+            <span className="ml-0.5">{tooltipRegionMeta.flags}</span> ·{" "}
+            {tooltipCount} {tooltipCount === 1 ? "story" : "stories"}
+          </span>
+          <div
+            className="absolute left-1/2 top-full h-2 w-2 -translate-x-1/2 -translate-y-1/2 rotate-45 border-b border-r border-border bg-slate-950/95"
+            aria-hidden="true"
+          />
+        </div>
+      )}
+
       <AmbientHeadlines
         globeRef={globeRef}
         items={ambientHeadlines}

@@ -249,6 +249,40 @@ Deno.serve(async (req) => {
       flagged = count ?? 0;
     }
 
+    // If fetch-news inserted the same article first with only the source homepage
+    // as its URL, correct it using the full RSS article URL from this function.
+    // Match by normalized title, but only overwrite homepage-only URLs.
+    let correctedUrls = 0;
+    const homepageOnlyRe = /^https?:\/\/[^/]+\/?$/;
+    const correctUrlByTitle = new Map<string, string>();
+
+    for (const a of unique) {
+      const t = normTitle(a.title);
+      if (!correctUrlByTitle.has(t) && a.url && !homepageOnlyRe.test(a.url)) {
+        correctUrlByTitle.set(t, a.url);
+      }
+    }
+
+    for (const r of (recent ?? []) as any[]) {
+      const correctUrl = correctUrlByTitle.get(normTitle(r.title ?? ""));
+      if (!correctUrl) continue;
+      if (!r.url || !homepageOnlyRe.test(r.url)) continue;
+      if (r.url === correctUrl) continue;
+      if (existingUrls.has(correctUrl)) continue; // avoid URL uniqueness conflicts
+
+      const { error: fixErr, count } = await supabase
+        .from("articles")
+        .update({ ticker_source: true, url: correctUrl }, { count: "exact" })
+        .eq("title", r.title)
+        .eq("url", r.url);
+
+      if (fixErr) {
+        console.warn(`ticker URL correction failed for "${r.title}":`, fixErr.message);
+      } else {
+        correctedUrls += count ?? 0;
+      }
+    }
+
     const rows = fresh.map((a) => ({
       title: a.title,
       url: a.url,
