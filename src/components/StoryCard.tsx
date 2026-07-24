@@ -61,7 +61,7 @@ export const StoryCard = ({
             Hot
           </span>
         )}
-        <h3 className="font-semibold text-base leading-snug text-foreground">
+        <h3 className="font-serifDisplay text-lg leading-snug text-foreground">
           {story.title}
         </h3>
       </div>

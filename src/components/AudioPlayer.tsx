@@ -200,7 +200,9 @@ export const AudioPlayer = ({ episodes, languages, regionId, regionName, regionF
       <div className="text-xs uppercase tracking-widest text-muted-foreground mb-1">
         🎙️ Morning Brief
       </div>
-      <h2 className="text-xl md:text-2xl font-bold mb-3">{dateLabel}</h2>
+      <h2 className="font-serifDisplay text-xl md:text-2xl leading-none mb-3">
+        {dateLabel}
+      </h2>
 
       <div className="flex items-center gap-2 mb-5">
         {langs.length > 1 && (

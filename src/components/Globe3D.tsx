@@ -337,39 +337,40 @@ export const Globe3D = ({
 
     // Hovered or selected → bright glow
     if (isFocusedTerritory(territoryId)) {
-      return "rgba(74, 111, 165, 0.25)";
+      return "rgba(74, 111, 165, 0.35)";
     }
 
-    // Territory polygon at rest → pulsating fill
+    // Territory polygon at rest → stronger pulsating fill
     if (territoryId) {
       const territoryIndex = territoryIndexById.get(territoryId) ?? 0;
       const phase = (Date.now() / 3500 + territoryIndex * 0.114) * Math.PI * 2;
-      const opacity = 0.06 + 0.12 * (0.5 + 0.5 * Math.sin(phase));
+      const opacity = 0.12 + 0.18 * (0.5 + 0.5 * Math.sin(phase));
       return `rgba(74, 111, 165, ${opacity.toFixed(3)})`;
     }
 
-    // Non-territory country → static dark
-    return "rgba(26, 42, 63, 0.85)";
+    // Non-territory country → darker to increase contrast
+    return "rgba(15, 22, 40, 0.92)";
   };
 
   const getPolygonStrokeColor = (d: any) => {
-    // Read animFrame so React/TS knows this accessor intentionally depends on
-    // the 80ms animation tick. The actual pulse phase still uses Date.now().
     void animFrame;
 
     const territoryId = (d as CountryFeature)._territoryId;
 
+    // Non-territory border → much dimmer
     if (!territoryId) {
-      return "#2a3a5f";
+      return "rgba(30, 45, 70, 0.4)";
     }
 
+    // Hovered or selected → strong bright border
     if (isFocusedTerritory(territoryId)) {
       return "rgba(74, 111, 165, 0.9)";
     }
 
+    // Territory at rest → stronger pulsating border
     const territoryIndex = territoryIndexById.get(territoryId) ?? 0;
     const phase = (Date.now() / 3500 + territoryIndex * 0.114) * Math.PI * 2;
-    const opacity = 0.08 + 0.17 * (0.5 + 0.5 * Math.sin(phase));
+    const opacity = 0.15 + 0.45 * (0.5 + 0.5 * Math.sin(phase));
 
     return `rgba(74, 111, 165, ${opacity.toFixed(3)})`;
   };

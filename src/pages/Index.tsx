@@ -145,10 +145,7 @@ const Index = () => {
       </Link>
 
       <header className="pt-4 pb-2 text-center shrink-0 relative z-10">
-        <h1
-          className="text-4xl md:text-5xl font-bold leading-none lowercase"
-          style={{ fontFamily: "'Space Grotesk', 'Inter', sans-serif", letterSpacing: "0" }}
-        >
+        <h1 className="font-serifDisplay text-4xl md:text-5xl leading-none lowercase">
           tick.
         </h1>
         <p className="mt-2 text-[11px] text-foreground/80 tracking-[0.15em]">

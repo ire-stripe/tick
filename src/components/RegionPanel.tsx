@@ -212,7 +212,7 @@ export const RegionPanel = ({ regionId, open, onClose }: Props) => {
           style={{ background: "rgba(17,29,46,0.75)" }}
         >
           <div
-            className="text-sm font-semibold"
+            className="font-serifDisplay text-2xl leading-none"
             style={{
               opacity: contentVisible ? 1 : 0,
               transition: "opacity 200ms ease-out",
