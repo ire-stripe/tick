@@ -37,13 +37,6 @@ export const AudioPlayer = ({ episodes, languages, regionId, regionName, regionF
   const langs = languages && languages.length > 0 ? languages : [{ code: "en", label: "EN" }];
   const player = useAudioPlayer();
 
-  const [voice, setVoiceState] = useState<Voice>(() => {
-  if (player.episode && player.episode.regionId === regionId && player.episode.voice) {
-    return player.episode.voice;
-  }
-  return loadSettings().voice;
-});
-
   const [lang, setLang] = useState<string>(() => {
     if (player.episode && player.episode.regionId === regionId) return player.episode.languageCode;
     const prefs = loadSettings();
@@ -91,6 +84,13 @@ export const AudioPlayer = ({ episodes, languages, regionId, regionName, regionF
   const script = episode?.script ?? null;
   const date = episode?.date ?? new Date().toISOString();
   const durationHint = episode?.duration_seconds ?? null;
+
+  const [voice, setVoiceState] = useState<Voice>(() => {
+  if (player.episode && player.episode.regionId === regionId && player.episode.voice) {
+    return player.episode.voice;
+  }
+  return loadSettings().voice;
+});
 
   // Voice fallback within the same language is fine (male → female).
   const audioUrl = voice === "male" ? (maleUrl ?? femaleUrl) : (femaleUrl ?? maleUrl);
@@ -188,21 +188,19 @@ export const AudioPlayer = ({ episodes, languages, regionId, regionName, regionF
   const pillClass = (active: boolean, disabled = false) =>
     "px-2.5 py-0.5 rounded-full text-[10px] font-semibold tracking-wider border transition-colors " +
     (disabled
-      ? "bg-transparent text-muted-foreground/40 border-border cursor-not-allowed"
+      ? "bg-transparent text-muted-foreground/40 border-white/10 cursor-not-allowed"
       : active
         ? "bg-primary text-primary-foreground border-primary"
-        : "bg-card text-muted-foreground border-border hover:text-primary hover:border-primary/40 hover:bg-muted");
+        : "bg-transparent text-muted-foreground border-white/15 hover:text-foreground hover:border-white/30");
 
   const maleDisabled = !maleUrl;
 
   return (
-    <div className="rounded-2xl border border-border-subtle bg-card p-6 md:p-8 shadow-sm">
+    <div className="glass rounded-2xl p-6 md:p-8">
       <div className="text-xs uppercase tracking-widest text-muted-foreground mb-1">
         🎙️ Morning Brief
       </div>
-      <h2 className="font-serifDisplay text-2xl md:text-3xl leading-none mb-4 text-foreground">
-        {dateLabel}
-      </h2>
+      <h2 className="text-xl md:text-2xl font-bold mb-3">{dateLabel}</h2>
 
       <div className="flex items-center gap-2 mb-5">
         {langs.length > 1 && (
@@ -280,7 +278,7 @@ export const AudioPlayer = ({ episodes, languages, regionId, regionName, regionF
           <div className="text-[11px] uppercase tracking-widest text-muted-foreground mb-2">
             Read the briefing (audio unavailable)
           </div>
-          <div className="max-h-72 overflow-y-auto pr-2 text-sm leading-relaxed text-muted-foreground whitespace-pre-wrap">
+          <div className="max-h-72 overflow-y-auto pr-2 text-sm leading-relaxed text-foreground/90 whitespace-pre-wrap">
             {displayScript}
           </div>
         </div>
@@ -291,7 +289,7 @@ export const AudioPlayer = ({ episodes, languages, regionId, regionName, regionF
       )}
 
       {audioUrl && displayScript && (
-        <div className="mt-4 pt-3 border-t border-border-subtle">
+        <div className="mt-4 pt-3 border-t border-white/5">
           <button
             type="button"
             onClick={() => setTranscriptOpen((v) => !v)}
@@ -300,12 +298,12 @@ export const AudioPlayer = ({ episodes, languages, regionId, regionName, regionF
             {transcriptOpen ? "Hide transcript" : "Show transcript"}
           </button>
           {transcriptOpen && (
-            <div className="mt-3 relative rounded-lg bg-muted/40 border border-border-subtle p-3 pr-10">
+            <div className="mt-3 relative rounded-lg bg-white/[0.03] border border-white/5 p-3 pr-10">
               <button
                 type="button"
                 onClick={copyTranscript}
                 aria-label="Copy transcript"
-                className="absolute top-2 right-2 h-7 w-7 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                className="absolute top-2 right-2 h-7 w-7 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-white/5 transition-colors"
                 title={copied ? "Copied!" : "Copy transcript"}
               >
                 {copied ? <Check className="h-3.5 w-3.5 text-primary" /> : <Copy className="h-3.5 w-3.5" />}

@@ -13,21 +13,15 @@ export default {
       },
     },
     extend: {
-      fontFamily: {
-        sans: ["Inter", "-apple-system", "BlinkMacSystemFont", "system-ui", "sans-serif"],
-        serifDisplay: ["DM Serif Display", "Georgia", "serif"],
-      },
       colors: {
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
         ring: "hsl(var(--ring))",
         background: "hsl(var(--background))",
         foreground: "hsl(var(--foreground))",
-
         primary: {
           DEFAULT: "hsl(var(--primary))",
           foreground: "hsl(var(--primary-foreground))",
-          hover: "#0D4E66",
         },
         secondary: {
           DEFAULT: "hsl(var(--secondary))",
@@ -53,30 +47,6 @@ export default {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
-
-        press: {
-          page: "#FAFAF7",
-          card: "#FFFFFF",
-          elevated: "#FFFFFF",
-          globe: "#0B1426",
-          text: "#1A1A1A",
-          body: "#333333",
-          muted: "#6B6B6B",
-          disabled: "#9CA3AF",
-          border: "#E8E4DF",
-          subtle: "#F0EDE8",
-          teal: "#0F5F7A",
-          tealHover: "#0D4E66",
-          breaking: "#CC3333",
-          success: "#16A34A",
-        },
-
-        ticker: {
-          DEFAULT: "#1A1A1A",
-          foreground: "#FFFFFF",
-          label: "#CC3333",
-        },
-
         sidebar: {
           DEFAULT: "hsl(var(--sidebar-background))",
           foreground: "hsl(var(--sidebar-foreground))",

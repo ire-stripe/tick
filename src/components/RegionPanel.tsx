@@ -195,24 +195,24 @@ export const RegionPanel = ({ regionId, open, onClose }: Props) => {
 
   return (
     <aside
-        className="fixed z-50 overflow-y-auto text-foreground"
-        style={{
-          background: "rgba(255, 255, 255, 0.96)",
+      className="fixed z-50 overflow-y-auto"
+      style={{
+          background: "rgba(17, 29, 46, 0.92)",
           backdropFilter: "blur(20px)",
           WebkitBackdropFilter: "blur(20px)",
-          border: "1px solid var(--border-default)",
-          boxShadow: "0 24px 70px rgba(26, 26, 26, 0.16)",
+          border: "1px solid rgba(255,255,255,0.08)",
+          boxShadow: "0 20px 60px rgba(0,0,0,0.5)",
           pointerEvents: open ? "auto" : "none",
           ...(isMobile ? mobileStyle : desktopStyle),
         }}
         onClick={(e) => e.stopPropagation()}
       >
         <div
-          className="sticky top-0 z-10 flex items-center justify-between px-5 py-4 border-b border-border backdrop-blur-md"
-          style={{ background: "rgba(255,255,255,0.88)" }}
+          className="sticky top-0 z-10 flex items-center justify-between px-5 py-4 border-b border-white/5 backdrop-blur-md"
+          style={{ background: "rgba(17,29,46,0.75)" }}
         >
           <div
-            className="font-serifDisplay text-2xl leading-none text-foreground"
+            className="text-sm font-semibold"
             style={{
               opacity: contentVisible ? 1 : 0,
               transition: "opacity 200ms ease-out",
@@ -222,7 +222,7 @@ export const RegionPanel = ({ regionId, open, onClose }: Props) => {
           </div>
           <button
             onClick={onClose}
-            className="h-8 w-8 rounded-full flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+            className="h-8 w-8 rounded-full flex items-center justify-center hover:bg-white/10 transition-colors"
             aria-label="Close"
           >
             <X className="h-4 w-4" />
@@ -248,12 +248,12 @@ export const RegionPanel = ({ regionId, open, onClose }: Props) => {
 
 
           <section>
-            <h3 className="text-[11px] uppercase tracking-[0.22em] text-muted-foreground mb-3">
+            <h3 className="text-[11px] uppercase tracking-[0.25em] text-muted-foreground mb-3">
               ── Latest (since this morning's brief) ──
             </h3>
             <div className="space-y-3">
               {loading ? (
-                <div className="rounded-xl h-24 animate-pulse bg-muted border border-border-subtle" />
+                <div className="glass rounded-xl h-24 animate-pulse" />
               ) : latest.length === 0 ? (
                 <p className="text-sm text-muted-foreground">Nothing new since the brief.</p>
               ) : (
@@ -266,7 +266,7 @@ export const RegionPanel = ({ regionId, open, onClose }: Props) => {
                       onClick={() =>
                         setVisibleCount((c) => Math.min(c + PAGE_SIZE, MAX_LATEST))
                       }
-                      className="w-full mt-2 py-3 text-[11px] uppercase tracking-[0.2em] text-muted-foreground hover:text-primary bg-card hover:bg-muted border border-border hover:border-primary/40 rounded-lg transition-colors"
+                      className="w-full mt-2 py-3 text-[11px] uppercase tracking-[0.2em] text-foreground/80 hover:text-primary bg-white/5 hover:bg-white/10 border border-white/15 hover:border-primary/40 rounded-lg transition-colors"
                     >
                       Show more ({Math.min(PAGE_SIZE, latest.length - visibleCount)} more)
                     </button>
@@ -278,12 +278,12 @@ export const RegionPanel = ({ regionId, open, onClose }: Props) => {
 
 
           <section>
-            <h3 className="text-[11px] uppercase tracking-[0.22em] text-muted-foreground mb-3">
+            <h3 className="text-[11px] uppercase tracking-[0.25em] text-muted-foreground mb-3">
               ── Today's stories (in the morning brief) ──
             </h3>
             <div className="space-y-3">
               {loading ? (
-                <div className="rounded-xl h-24 animate-pulse bg-muted border border-border-subtle" />
+                <div className="glass rounded-xl h-24 animate-pulse" />
               ) : (
                 today.map((s) => (
                   <StoryCard

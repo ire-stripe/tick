@@ -48,7 +48,7 @@ export const AudioProgressBar = ({ currentTime, duration, onSeek, compact }: Pro
       style={{ height: Math.max(barH, dotSize), display: "flex", alignItems: "center" }}
     >
       <div
-        className="absolute inset-x-0 rounded-full bg-muted"
+        className="absolute inset-x-0 rounded-full bg-white/10"
         style={{ height: barH, top: "50%", transform: "translateY(-50%)" }}
       />
       <div
@@ -63,7 +63,7 @@ export const AudioProgressBar = ({ currentTime, duration, onSeek, compact }: Pro
         }}
       />
       <div
-        className="absolute rounded-full bg-primary ring-2 ring-card shadow-[0_1px_4px_rgba(26,26,26,0.18)]"
+        className="absolute rounded-full bg-primary shadow-[0_1px_4px_rgba(0,0,0,0.5)]"
         style={{
           width: dotSize,
           height: dotSize,

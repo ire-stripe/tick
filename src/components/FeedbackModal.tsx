@@ -32,7 +32,7 @@ export const FeedbackModal = () => {
           💡 Know a great source we're missing? Suggest one
         </button>
       </DialogTrigger>
-      <DialogContent className="glass border-border">
+      <DialogContent className="glass border-white/10">
         <DialogHeader>
           <DialogTitle>Suggest a source</DialogTitle>
         </DialogHeader>
