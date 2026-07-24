@@ -165,7 +165,7 @@ const Index = () => {
               boxShadow: "0 30px 90px rgba(11, 20, 38, 0.28)",
             }}
           />
-          <div className="relative h-full w-full">
+          <div className="relative w-full" style={{ height: "min(68vh, 680px)" }}>
             <Globe3D
               counts={counts}
               activeRegion={activeRegion}
