@@ -238,7 +238,7 @@ export const Globe3D = ({
     el.setAttribute("data-coming-soon", "true");
     el.style.pointerEvents = "none";
     el.style.transform = "translate(-50%, -50%)";
-    el.style.color = "hsl(215 15% 55%)";
+    el.style.color = "#8A7F72";
     el.style.fontSize = "10px";
     el.style.letterSpacing = "0.2em";
     el.style.fontWeight = "600";
@@ -335,43 +335,44 @@ export const Globe3D = ({
 
     const territoryId = (d as CountryFeature)._territoryId;
 
-    // Hovered or selected → bright glow
+    // Hovered or selected → bright teal glow
     if (isFocusedTerritory(territoryId)) {
-      return "rgba(74, 111, 165, 0.25)";
+      return "rgba(15, 95, 122, 0.35)";
     }
 
-    // Territory polygon at rest → pulsating fill
+    // Territory polygon at rest → pulsating teal fill
     if (territoryId) {
       const territoryIndex = territoryIndexById.get(territoryId) ?? 0;
       const phase = (Date.now() / 3500 + territoryIndex * 0.114) * Math.PI * 2;
-      const opacity = 0.06 + 0.12 * (0.5 + 0.5 * Math.sin(phase));
-      return `rgba(74, 111, 165, ${opacity.toFixed(3)})`;
+      const opacity = 0.10 + 0.15 * (0.5 + 0.5 * Math.sin(phase));
+      return `rgba(15, 95, 122, ${opacity.toFixed(3)})`;
     }
 
-    // Non-territory country → static dark
-    return "rgba(26, 42, 63, 0.85)";
+    // Non-territory country → warm gray-brown
+    return "rgba(168, 155, 138, 0.85)";
   };
 
   const getPolygonStrokeColor = (d: any) => {
-    // Read animFrame so React/TS knows this accessor intentionally depends on
-    // the 80ms animation tick. The actual pulse phase still uses Date.now().
     void animFrame;
 
     const territoryId = (d as CountryFeature)._territoryId;
 
+    // Non-territory country → warm gray border
     if (!territoryId) {
-      return "#2a3a5f";
+      return "#B8AFA3";
     }
 
+    // Hovered or selected → strong teal border
     if (isFocusedTerritory(territoryId)) {
-      return "rgba(74, 111, 165, 0.9)";
+      return "rgba(15, 95, 122, 0.9)";
     }
 
+    // Territory polygon at rest → pulsating teal border
     const territoryIndex = territoryIndexById.get(territoryId) ?? 0;
     const phase = (Date.now() / 3500 + territoryIndex * 0.114) * Math.PI * 2;
-    const opacity = 0.08 + 0.17 * (0.5 + 0.5 * Math.sin(phase));
+    const opacity = 0.10 + 0.40 * (0.5 + 0.5 * Math.sin(phase));
 
-    return `rgba(74, 111, 165, ${opacity.toFixed(3)})`;
+    return `rgba(15, 95, 122, ${opacity.toFixed(3)})`;
   };
 
   const getPolygonAltitude = (d: any) => {
@@ -517,25 +518,25 @@ export const Globe3D = ({
           backgroundColor="rgba(0,0,0,0)"
           showGlobe
           showAtmosphere
-          atmosphereColor="#4a6fa5"
-          atmosphereAltitude={0.18}
+          atmosphereColor="#B8A89A"
+          atmosphereAltitude={0.12}
           globeMaterial={
             new THREE.MeshPhongMaterial({
-              color: new THREE.Color("#0a1628"),
-              emissive: new THREE.Color("#0a1628"),
-              shininess: 4,
+              color: new THREE.Color("#C8BFB0"),
+              emissive: new THREE.Color("#A89F94"),
+              shininess: 8,
             })
           }
           polygonsData={polygonData}
           polygonCapColor={getPolygonCapColor}
-          polygonSideColor={() => "rgba(10, 22, 40, 0.6)"}
+          polygonSideColor={() => "rgba(168, 155, 138, 0.4)"}
           polygonStrokeColor={getPolygonStrokeColor}
           polygonAltitude={getPolygonAltitude}
           polygonsTransitionDuration={0}
           onPolygonHover={handlePolygonHover}
           onPolygonClick={handlePolygonClick}
           arcsData={arcs}
-          arcColor={() => "rgba(74, 111, 165, 0.22)"}
+          arcColor={() => "rgba(15, 95, 122, 0.25)"}
           arcStroke={0.4}
           arcAltitudeAutoScale={0.5}
           arcDashLength={0.15}

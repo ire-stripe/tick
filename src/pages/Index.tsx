@@ -137,15 +137,24 @@ const Index = () => {
         <SettingsIcon className="h-5 w-5" />
       </Link>
 
-      <header className="shrink-0 relative z-20 border-b border-border bg-card/95 px-4 py-4 text-center">
-        <h1 className="font-serifDisplay text-5xl md:text-6xl leading-none lowercase text-foreground">
+      <header
+        className="shrink-0 relative z-20 border-b border-border bg-card/95 overflow-hidden transition-all duration-500 ease-in-out"
+        style={{
+          maxHeight: panelOpen ? 0 : 200,
+          opacity: panelOpen ? 0 : 1,
+          paddingTop: panelOpen ? 0 : 16,
+          paddingBottom: panelOpen ? 0 : 16,
+          borderBottomWidth: panelOpen ? 0 : 1,
+        }}
+      >
+        <h1 className="font-serifDisplay text-5xl md:text-6xl leading-none lowercase text-foreground text-center">
           tick.
         </h1>
-        <p className="mt-2 text-[11px] text-muted-foreground tracking-[0.15em]">
+        <p className="mt-2 text-[11px] text-muted-foreground tracking-[0.15em] text-center">
           Get the latest fintech news in 5 minutes.
         </p>
         <p
-          className="text-[10px] text-muted-foreground tracking-[0.15em] mt-0.5"
+          className="text-[10px] text-muted-foreground tracking-[0.15em] mt-0.5 text-center"
           style={{
             opacity: hasSelected ? 0 : 0.75,
             transition: "opacity 500ms ease-out",
@@ -157,14 +166,6 @@ const Index = () => {
 
       <main className="flex-1 min-h-0 flex items-center justify-center px-4 py-4 relative z-10 bg-background">
         <div className="relative w-full max-w-6xl flex-1 min-h-[420px]">
-          <div
-            className="absolute left-1/2 top-1/2 h-[88%] w-[min(96vw,980px)] -translate-x-1/2 -translate-y-1/2 rounded-[999px]"
-            style={{
-              background:
-                "radial-gradient(ellipse at center, rgba(11,20,38,0.98) 0%, rgba(11,20,38,0.92) 42%, rgba(11,20,38,0.55) 68%, rgba(250,250,247,0) 100%)",
-              boxShadow: "0 30px 90px rgba(11, 20, 38, 0.28)",
-            }}
-          />
           <div className="relative w-full" style={{ height: "min(68vh, 680px)" }}>
             <Globe3D
               counts={counts}
