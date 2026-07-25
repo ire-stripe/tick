@@ -26,7 +26,7 @@ const Index = () => {
   const [hasSelected, setHasSelected] = useState(false);
   const [enabledRegions, setEnabledRegions] = useState<string[]>(() => loadSettings().regions);
   const { episode: activeEpisode } = useAudioPlayer();
-  const ambientCutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  const ambientCutoff = new Date(Date.now() - 72 * 60 * 60 * 1000).toISOString();
 
   // Reload whenever the page regains focus (e.g. returning from /settings).
   useEffect(() => {
