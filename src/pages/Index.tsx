@@ -26,6 +26,7 @@ const Index = () => {
   const [hasSelected, setHasSelected] = useState(false);
   const [enabledRegions, setEnabledRegions] = useState<string[]>(() => loadSettings().regions);
   const { episode: activeEpisode } = useAudioPlayer();
+  const ambientCutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
 
   // Reload whenever the page regains focus (e.g. returning from /settings).
   useEffect(() => {
@@ -102,7 +103,7 @@ const Index = () => {
       const seenAmb = new Set<string>();
       const ambientOut: { title: string; region: RegionId }[] = [];
       articles.forEach((a: any) => {
-        if (a.published_at < todayIso) return;
+        if (a.published_at < ambientCutoff) return;
         if (!REGION_IDS.includes(a.region)) return;
         const key = (a.title || "").toLowerCase().trim();
         if (!key || seenAmb.has(key)) return;
