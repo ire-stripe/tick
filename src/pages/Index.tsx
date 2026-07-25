@@ -111,6 +111,7 @@ const Index = () => {
         ambientOut.push({ title: a.title, region: a.region as RegionId });
       });
       setAmbient(ambientOut);
+      console.log("ambient headlines:", ambientOut.length, ambientOut.slice(0, 3));
 
 
       setRefreshedAt(new Date());
