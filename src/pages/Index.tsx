@@ -102,12 +102,17 @@ const Index = () => {
       // deduped by title. Shown one at a time near their region's dot.
       const seenAmb = new Set<string>();
       const ambientOut: { title: string; region: RegionId }[] = [];
+      const regionAmbCount: Record<string, number> = {};
+
       articles.forEach((a: any) => {
         if (a.published_at < ambientCutoff) return;
         if (!REGION_IDS.includes(a.region)) return;
+        const count = regionAmbCount[a.region] ?? 0;
+        if (count >= 5) return;
         const key = (a.title || "").toLowerCase().trim();
         if (!key || seenAmb.has(key)) return;
         seenAmb.add(key);
+        regionAmbCount[a.region] = count + 1;
         ambientOut.push({ title: a.title, region: a.region as RegionId });
       });
       setAmbient(ambientOut);
