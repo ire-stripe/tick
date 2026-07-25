@@ -222,6 +222,10 @@ export const Globe3D = ({
     const controls: any = g.controls();
 
     if (activeRegion) {
+      if (resumeTimer.current) {
+        window.clearTimeout(resumeTimer.current);
+        resumeTimer.current = null;
+      }
       const r = REGIONS[activeRegion];
       controls.autoRotate = false;
 
