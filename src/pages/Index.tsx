@@ -111,7 +111,9 @@ const Index = () => {
         ambientOut.push({ title: a.title, region: a.region as RegionId });
       });
       setAmbient(ambientOut);
-      console.log("ambient headlines:", ambientOut.length, ambientOut.slice(0, 3));
+      console.log("ambient headlines:", ambientOut.length, ambientOut);
+      console.log("articles within cutoff:", articles.filter(a => a.published_at >= ambientCutoff).length);
+      console.log("sample regions:", [...new Set(articles.slice(0, 50).map(a => a.region))]);
 
 
       setRefreshedAt(new Date());
