@@ -166,7 +166,7 @@ export const Globe3D = ({
   useEffect(() => {
     const interval = window.setInterval(() => {
       setAnimFrame((n) => n + 1);
-    }, 80);
+    }, 120);
 
     return () => window.clearInterval(interval);
   }, []);
@@ -373,8 +373,12 @@ export const Globe3D = ({
 
     const territoryId = (d as CountryFeature)._territoryId;
 
-    // Hovered or selected → bright glow
-    if (isFocusedTerritory(territoryId)) {
+    // Selected → gold
+    if (activeRegion && territoryId === activeRegion) {
+      return "rgba(218, 165, 32, 0.35)";
+    }
+    // Hovered → blue glow
+    if (territoryId && territoryId === hoveredTerritory) {
       return "rgba(74, 111, 165, 0.35)";
     }
 
@@ -400,8 +404,12 @@ export const Globe3D = ({
       return "rgba(30, 45, 70, 0.4)";
     }
 
-    // Hovered or selected → strong bright border
-    if (isFocusedTerritory(territoryId)) {
+    // Selected → gold border
+    if (activeRegion && territoryId === activeRegion) {
+      return "rgba(218, 165, 32, 0.8)";
+    }
+    // Hovered → blue border
+    if (territoryId && territoryId === hoveredTerritory) {
       return "rgba(74, 111, 165, 0.9)";
     }
 
