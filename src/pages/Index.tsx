@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { Settings as SettingsIcon } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
@@ -13,6 +13,8 @@ import { loadSettings } from "@/lib/userSettings";
 
 
 const Index = () => {
+  const closeTimerRef = useRef<number | null>(null);
+  const clearPanelTimerRef = useRef<number | null>(null);
   const [counts, setCounts] = useState<Record<string, number>>({});
   const [headlines, setHeadlines] = useState<any[]>([]);
   const [ambient, setAmbient] = useState<{ title: string; region: RegionId }[]>([]);
@@ -119,6 +121,15 @@ const Index = () => {
   const minsAgo = Math.max(1, Math.floor((Date.now() - refreshedAt.getTime()) / 60000));
 
   const handleSelectRegion = (id: RegionId) => {
+    if (closeTimerRef.current) {
+      window.clearTimeout(closeTimerRef.current);
+      closeTimerRef.current = null;
+    }
+    if (clearPanelTimerRef.current) {
+      window.clearTimeout(clearPanelTimerRef.current);
+      clearPanelTimerRef.current = null;
+    }
+
     setActiveRegion(id);
     setPanelRegion(id);
     setPanelOpen(true);
@@ -126,10 +137,20 @@ const Index = () => {
   };
 
   const handleClose = () => {
-    // Panel fades first, then map zooms out (100ms later)
     setPanelOpen(false);
-    window.setTimeout(() => setActiveRegion(null), 100);
-    window.setTimeout(() => setPanelRegion(null), 350);
+
+    if (closeTimerRef.current) window.clearTimeout(closeTimerRef.current);
+    if (clearPanelTimerRef.current) window.clearTimeout(clearPanelTimerRef.current);
+
+    closeTimerRef.current = window.setTimeout(() => {
+      setActiveRegion(null);
+      closeTimerRef.current = null;
+    }, 100);
+
+    clearPanelTimerRef.current = window.setTimeout(() => {
+      setPanelRegion(null);
+      clearPanelTimerRef.current = null;
+    }, 350);
   };
 
   return (

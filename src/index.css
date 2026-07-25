@@ -42,6 +42,10 @@
   }
 }
 
+canvas {
+  cursor: inherit !important;
+}
+
 @layer base {
   * {
     @apply border-border;

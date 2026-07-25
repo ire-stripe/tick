@@ -16,7 +16,7 @@ interface Props {
 const COUNTRIES_URL =
   "https://unpkg.com/three-globe/example/country-polygons/ne_110m_admin_0_countries.geojson";
 
-const DEFAULT_ALT = 2.5;
+const DEFAULT_ALT = 1.8;
 const FOCUS_ALT = 0.9;
 
 const EXTRA_TERRITORY_COUNTRIES: Record<string, string[]> = {
@@ -75,6 +75,7 @@ export const Globe3D = ({
   const [tooltipPos, setTooltipPos] = useState<TooltipPos | null>(null);
   const [animFrame, setAnimFrame] = useState(0);
   const resumeTimer = useRef<number | null>(null);
+  const momentumRafRef = useRef<number | null>(null);
 
   // Keep the latest select handler in a ref so globe callbacks do not need to be
   // invalidated on every parent render.
@@ -170,28 +171,40 @@ export const Globe3D = ({
     return () => window.clearInterval(interval);
   }, []);
 
-  // Init controls / auto-rotate once globe ready
+  // Init controls / auto-rotate once globe ready.
+  //
+  // OrbitControls must stay enabled so react-globe.gl can keep autoRotate running,
+  // but all direct user interaction is disabled. Rotation is handled only by the
+  // custom wheel handler below, which calls pointOfView() directly.
   useEffect(() => {
     const g = globeRef.current;
     if (!g) return;
 
     const controls: any = g.controls();
+
+    // Keep controls alive for autoRotate/internal updates.
+    controls.enabled = true;
+
+    // Disable all built-in mouse/touch interaction.
+    controls.enableRotate = false;
+    controls.enableZoom = false;
+    controls.enablePan = false;
+    controls.enableKeys = false;
+
+    // Belt-and-suspenders: remove OrbitControls' gesture mappings so browser
+    // pointer/touch events cannot re-enter rotate/zoom/pan even if flags are reset.
+    controls.mouseButtons = {};
+    controls.touches = {};
+
+    // Keep automatic idle spin.
     controls.autoRotate = !activeRegion;
     controls.autoRotateSpeed = 0.3;
-    controls.enableZoom = true;
-    controls.minDistance = 130;
-    controls.maxDistance = 500;
-    controls.rotateSpeed = 0.9;
+
+    // Keep damping for autoRotate smoothness. This does not allow user drag.
     controls.enableDamping = true;
     controls.dampingFactor = 0.08;
 
-    const stop = () => {
-      controls.autoRotate = false;
-      if (resumeTimer.current) window.clearTimeout(resumeTimer.current);
-    };
-
-    controls.addEventListener("start", stop);
-    return () => controls.removeEventListener("start", stop);
+    controls.update?.();
   }, [ready, activeRegion]);
 
   // Fly-to on region change
@@ -199,14 +212,39 @@ export const Globe3D = ({
     const g = globeRef.current;
     if (!g) return;
 
+    // Stop any custom wheel momentum before programmatic camera movement.
+    // Otherwise the momentum loop can immediately overwrite this pointOfView().
+    if (momentumRafRef.current) {
+      cancelAnimationFrame(momentumRafRef.current);
+      momentumRafRef.current = null;
+    }
+
     const controls: any = g.controls();
 
     if (activeRegion) {
       const r = REGIONS[activeRegion];
       controls.autoRotate = false;
-      g.pointOfView({ lat: r.lat, lng: r.lng, altitude: FOCUS_ALT }, 800);
+
+      g.pointOfView(
+        {
+          lat: r.lat,
+          lng: r.lng,
+          altitude: FOCUS_ALT,
+        },
+        800,
+      );
     } else {
-      g.pointOfView({ altitude: DEFAULT_ALT }, 800);
+      const pov = g.pointOfView();
+
+      g.pointOfView(
+        {
+          lat: pov.lat ?? 30,
+          lng: pov.lng ?? 15,
+          altitude: DEFAULT_ALT,
+        },
+        800,
+      );
+
       if (resumeTimer.current) window.clearTimeout(resumeTimer.current);
       resumeTimer.current = window.setTimeout(() => {
         const c: any = globeRef.current?.controls();
@@ -385,18 +423,37 @@ export const Globe3D = ({
     setHoveredTerritory(territoryId);
   }, []);
 
-  const handlePolygonClick = useCallback((polygon: any | null) => {
+  const polygonClickRef = useRef(false);
+
+  const handlePolygonClick = useCallback((polygon: any | null, event?: { stopPropagation?: () => void }) => {
+    event?.stopPropagation?.();
+
     const territoryId = (polygon as CountryFeature | null)?._territoryId ?? null;
     if (!territoryId) return;
 
-    onSelectRef.current?.(territoryId);
-  }, []);
+    polygonClickRef.current = true;
+    window.setTimeout(() => {
+      polygonClickRef.current = false;
+    }, 0);
 
-  const pressRef = useRef<{ x: number; y: number; t: number } | null>(null);
+    if (territoryId === activeRegion) {
+      onCloseRegion?.();
+      return;
+    }
+
+    onSelectRef.current?.(territoryId);
+  }, [activeRegion, onCloseRegion]);
+
+  const pressRef = useRef<{ x: number; y: number; t: number; territoryId: RegionId | null } | null>(null);
 
   const handlePointerDown = (e: React.PointerEvent) => {
     if (!activeRegion) return;
-    pressRef.current = { x: e.clientX, y: e.clientY, t: Date.now() };
+    pressRef.current = {
+      x: e.clientX,
+      y: e.clientY,
+      t: Date.now(),
+      territoryId: hoveredTerritory,
+    };
   };
 
   const handlePointerUp = (e: React.PointerEvent) => {
@@ -412,7 +469,10 @@ export const Globe3D = ({
     const elapsed = Date.now() - p.t;
 
     if (dist > 5 || elapsed > 200) return;
-    if (hoveredTerritory) return;
+
+    // If the press started on a territory, let onPolygonClick handle same-region
+    // close or different-region switch. Do not treat it as background.
+    if (p.territoryId || hoveredTerritory || polygonClickRef.current) return;
 
     onCloseRegion?.();
   };
@@ -425,7 +485,6 @@ export const Globe3D = ({
     if (!el || !ready) return;
 
     const vel = { lat: 0, lng: 0 };
-    let raf = 0;
     let lastWheelTs = 0;
 
     const applyDelta = (dLat: number, dLng: number) => {
@@ -449,7 +508,7 @@ export const Globe3D = ({
       vel.lng *= 0.92;
 
       if (Math.abs(vel.lat) < 0.002 && Math.abs(vel.lng) < 0.002) {
-        raf = 0;
+        momentumRafRef.current = null;
         return;
       }
 
@@ -459,14 +518,22 @@ export const Globe3D = ({
         applyDelta(vel.lat, vel.lng);
       }
 
-      raf = requestAnimationFrame(tick);
+      momentumRafRef.current = requestAnimationFrame(tick);
     };
 
     const onWheel = (e: WheelEvent) => {
-      if (e.ctrlKey) return; // pinch-zoom → let OrbitControls handle
-
       e.preventDefault();
       e.stopPropagation();
+
+      // Pinch zoom (ctrlKey=true on trackpad) → adjust altitude manually
+      if (e.ctrlKey) {
+        const g = globeRef.current;
+        if (!g) return;
+        const pov = g.pointOfView();
+        const newAlt = Math.max(0.8, Math.min(3.0, pov.altitude + e.deltaY * 0.005));
+        g.pointOfView({ ...pov, altitude: newAlt }, 0);
+        return;
+      }
 
       const controls: any = globeRef.current?.controls();
       if (controls) controls.autoRotate = false;
@@ -484,7 +551,9 @@ export const Globe3D = ({
       vel.lng = vel.lng * 0.5 + dLng * 0.5;
       lastWheelTs = performance.now();
 
-      if (!raf) raf = requestAnimationFrame(tick);
+      if (!momentumRafRef.current) {
+        momentumRafRef.current = requestAnimationFrame(tick);
+      }
     };
 
     // Capture phase + non-passive so we can preventDefault ahead of
@@ -493,7 +562,11 @@ export const Globe3D = ({
 
     return () => {
       el.removeEventListener("wheel", onWheel, { capture: true } as any);
-      if (raf) cancelAnimationFrame(raf);
+
+      if (momentumRafRef.current) {
+        cancelAnimationFrame(momentumRafRef.current);
+        momentumRafRef.current = null;
+      }
     };
   }, [ready]);
 
@@ -507,7 +580,10 @@ export const Globe3D = ({
         opacity: ready ? 1 : 0,
         transition: "opacity 500ms ease-out",
         touchAction: "none",
-        cursor: hoveredTerritory ? "pointer" : "grab",
+        cursor:
+          hoveredTerritory && (!enabledSet || enabledSet.has(hoveredTerritory))
+            ? "pointer"
+            : "default",
       }}
     >
       {size.w > 0 && (
