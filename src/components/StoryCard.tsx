@@ -12,6 +12,10 @@ export interface Story {
   created_at: string;
   published_at: string;
   article_audio_url?: string | null;
+  stripe_play?: string | null;
+  stripe_products?: string[] | null;
+  proof_point_text?: string | null;
+  success_story_id?: string | null;
 }
 
 function relTime(iso: string) {
@@ -42,6 +46,9 @@ export const StoryCard = ({
   }, [story.id]);
 
   const canListen = !!story.article_audio_url;
+  const hasStripePlay = !!story.stripe_play?.trim();
+  const stripeProducts = story.stripe_products?.filter(Boolean) ?? [];
+  const proofPoint = story.proof_point_text?.trim();
 
   const handleListen = () => {
     if (!story.article_audio_url) return;
@@ -68,6 +75,38 @@ export const StoryCard = ({
       {story.summary && (
         <p className="text-sm text-muted-foreground mb-3 line-clamp-2">{story.summary}</p>
       )}
+
+      {hasStripePlay && (
+        <div className="mb-3 rounded-lg border border-[rgba(218,165,32,0.22)] bg-zinc-950/35 px-3 py-2.5">
+          <div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-[rgba(218,165,32,0.95)]">
+            ⚡ Stripe Play
+          </div>
+
+          <p className="text-xs leading-relaxed text-zinc-100/90">
+            {story.stripe_play}
+          </p>
+
+          {stripeProducts.length > 0 && (
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {stripeProducts.map((product) => (
+                <span
+                  key={product}
+                  className="rounded-full border border-white/10 bg-zinc-900/80 px-2 py-0.5 text-[10px] font-medium text-zinc-300"
+                >
+                  {product}
+                </span>
+              ))}
+            </div>
+          )}
+
+          {proofPoint && (
+            <p className="mt-2 border-l border-[rgba(218,165,32,0.35)] pl-2 text-[11px] leading-relaxed text-zinc-400">
+              📊 “{proofPoint}”
+            </p>
+          )}
+        </div>
+      )}
+
       <div className="flex items-center justify-between gap-2">
         <span className="text-xs text-muted-foreground">
           {story.source} · {relTime(story.published_at)}

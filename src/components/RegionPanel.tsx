@@ -110,7 +110,7 @@ export const RegionPanel = ({ regionId, open, onClose }: Props) => {
         all.filter((a) => !a.is_in_brief && a.published_at >= todayIso) as Story[],
       ).slice(0, MAX_LATEST);
       const todayList = dedupeByTitle(
-        all.filter((a) => a.is_in_brief && a.published_at >= todayIso) as Story[],
+        all.filter((a) => a.is_in_brief) as Story[],
       ).slice(0, TODAY_MAX);
 
       if (latestList.length === 0 && todayList.length === 0) {
