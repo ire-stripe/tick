@@ -14,7 +14,7 @@ import {
 } from "../_shared/territories.ts";
 
 // Per-article spoken-summary/TTS config.
-const MAX_TTS_PER_RUN = 10;
+const MAX_TTS_PER_RUN = 0;
 const TTS_DELAY_MS = 3000;
 const LANG_TTS_CODE: Record<string, string> = {
   en: "en-GB", fr: "fr-FR", de: "de-DE", it: "it-IT", es: "es-ES", pt: "pt-PT", nl: "nl-NL", no: "nb-NO",
@@ -23,7 +23,6 @@ const LANG_NAME: Record<string, string> = {
   en: "English", fr: "French", de: "German", it: "Italian", es: "Spanish", pt: "Portuguese", nl: "Dutch", no: "Norwegian",
 };
 
-const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY")!;
 // Strip whitespace AND invisible unicode separators (U+2028/U+2029/BOM) that
 // can sneak in when a key is pasted from a rich-text source.
 const GNEWS_API_KEY = (Deno.env.get("GNEWS_API_KEY") ?? "").replace(/[\s\u2028\u2029\uFEFF]+/g, "");
@@ -222,6 +221,11 @@ async function fetchGNews(country: string): Promise<Array<Omit<FetchedArticle, "
         const host = (() => { try { return new URL(a.url).hostname; } catch { return ""; } })();
         return host && !NON_EMEA_HOST_RE.test(host);
       })
+      .filter((a: any) => {
+        const ok = hasArticlePath(a.url);
+        if (!ok) console.warn(`GNews ${country} skipped homepage-only URL: ${a.url}`);
+        return ok;
+      })
       .map((a: any) => ({
         title: (a.title ?? "").slice(0, 500),
         url: a.url,
@@ -235,6 +239,41 @@ async function fetchGNews(country: string): Promise<Array<Omit<FetchedArticle, "
   }
 }
 
+const ARTICLE_FETCH_HEADERS = {
+  "User-Agent":
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+  Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+  "Accept-Language": "en-US,en;q=0.9",
+};
+
+async function resolveArticleUrl(url: string): Promise<string | null> {
+  if (!hasArticlePath(url)) {
+    console.warn(`skip homepage-only URL: ${url}`);
+    return null;
+  }
+
+  try {
+    const res = await fetch(url, {
+      headers: ARTICLE_FETCH_HEADERS,
+      signal: AbortSignal.timeout(8000),
+      redirect: "follow",
+    });
+    const finalUrl = res.url || url;
+    await res.body?.cancel().catch(() => {});
+
+    if (!hasArticlePath(finalUrl)) {
+      console.warn(`skip redirected homepage URL: ${url} -> ${finalUrl}`);
+      return null;
+    }
+
+    return finalUrl;
+  } catch (_e) {
+    // If validation fetch is blocked but the original URL has an article-like path,
+    // keep it rather than dropping a potentially valid story.
+    return url;
+  }
+}
+
 // ── Article body extraction ────────────────────────────────────────────────
 // Fetch the article URL and pull the main body text. Strips scripts/styles
 // and prefers <article> or <main>; falls back to concatenated <p> tags.
@@ -242,16 +281,12 @@ async function fetchGNews(country: string): Promise<Array<Omit<FetchedArticle, "
 async function extractFullText(url: string): Promise<string | null> {
   try {
     const res = await fetch(url, {
-      headers: {
-        "User-Agent":
-          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-        "Accept-Language": "en-US,en;q=0.9",
-      },
+      headers: ARTICLE_FETCH_HEADERS,
       signal: AbortSignal.timeout(10000),
       redirect: "follow",
     });
     if (!res.ok) return null;
+    if (!hasArticlePath(res.url || url)) return null;
     const ct = res.headers.get("content-type") ?? "";
     if (!ct.includes("html")) return null;
     let html = await res.text();
@@ -289,30 +324,98 @@ async function extractFullText(url: string): Promise<string | null> {
   }
 }
 
-// ── Lovable AI Gateway (Gemini) ────────────────────────────────────────────
+// ── Vertex AI Gemini ─────────────────────────────────────────────────────────
+let vertexAccessToken: string | null = null;
+let vertexAccessTokenExpiresAt = 0;
+let vertexPrivateKey: CryptoKey | null = null;
+
+function base64url(data: string | ArrayBuffer): string {
+  const str = typeof data === "string"
+    ? btoa(data)
+    : btoa(String.fromCharCode(...new Uint8Array(data)));
+  return str.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+async function getVertexAccessToken(): Promise<string | null> {
+  if (vertexAccessToken && Date.now() < vertexAccessTokenExpiresAt - 60_000) {
+    return vertexAccessToken;
+  }
+
+  const serviceAccount = JSON.parse(Deno.env.get("GOOGLE_SERVICE_ACCOUNT_JSON")!);
+  const now = Math.floor(Date.now() / 1000);
+  const header = base64url(JSON.stringify({ alg: "RS256", typ: "JWT" }));
+  const payload = base64url(JSON.stringify({
+    iss: serviceAccount.client_email,
+    scope: "https://www.googleapis.com/auth/cloud-platform",
+    aud: "https://oauth2.googleapis.com/token",
+    iat: now,
+    exp: now + 3600,
+  }));
+
+  if (!vertexPrivateKey) {
+    const pemContents = serviceAccount.private_key
+      .replace(/-----BEGIN PRIVATE KEY-----/, "")
+      .replace(/-----END PRIVATE KEY-----/, "")
+      .replace(/\n/g, "");
+    const binaryKey = Uint8Array.from(atob(pemContents), (c) => c.charCodeAt(0));
+    vertexPrivateKey = await crypto.subtle.importKey(
+      "pkcs8", binaryKey,
+      { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
+      false, ["sign"]
+    );
+  }
+
+  const signatureInput = new TextEncoder().encode(`${header}.${payload}`);
+  const signature = await crypto.subtle.sign("RSASSA-PKCS1-v1_5", vertexPrivateKey, signatureInput);
+  const jwt = `${header}.${payload}.${base64url(signature)}`;
+
+  const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: `grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&assertion=${jwt}`,
+  });
+  if (!tokenRes.ok) {
+    const t = await tokenRes.text();
+    console.warn(`Vertex token ${tokenRes.status}: ${t.slice(0, 200)}`);
+    return null;
+  }
+
+  const tokenData = await tokenRes.json();
+  vertexAccessToken = tokenData.access_token ?? null;
+  vertexAccessTokenExpiresAt = Date.now() + ((tokenData.expires_in ?? 3600) * 1000);
+  return vertexAccessToken;
+}
+
 async function callGemini(prompt: string): Promise<string | null> {
   try {
-    const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Lovable-API-Key": LOVABLE_API_KEY,
-      },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
-        messages: [{ role: "user", content: prompt }],
-      }),
-      signal: AbortSignal.timeout(20000),
-    });
+    const accessToken = await getVertexAccessToken();
+    if (!accessToken) return null;
+
+    const res = await fetch(
+      "https://us-central1-aiplatform.googleapis.com/v1/projects/tick-502812/locations/us-central1/publishers/google/models/gemini-2.5-flash:generateContent",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({
+          contents: [{ role: "user", parts: [{ text: prompt }] }],
+          generationConfig: { temperature: 0.3, maxOutputTokens: 1024 },
+        }),
+        signal: AbortSignal.timeout(30000),
+      }
+    );
+
     if (!res.ok) {
       const t = await res.text();
-      console.warn(`AI gateway ${res.status}: ${t.slice(0, 200)}`);
+      console.warn(`Vertex AI ${res.status}: ${t.slice(0, 200)}`);
       return null;
     }
     const data = await res.json();
-    return data?.choices?.[0]?.message?.content?.trim() ?? null;
+    return data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ?? null;
   } catch (e) {
-    console.warn("AI gateway failed", (e as Error).message);
+    console.warn("Gemini call failed:", (e as Error).message);
     return null;
   }
 }
@@ -546,7 +649,7 @@ Deno.serve(async (req) => {
   }
 
   // Cap per run to protect AI credits
-  const MAX_PER_RUN = 60;
+  const MAX_PER_RUN = 20;
   const toProcess = interleaved.slice(0, MAX_PER_RUN);
   const perRegionCounts: Record<string, number> = {};
   for (const a of toProcess) perRegionCounts[a.territory_id] = (perRegionCounts[a.territory_id] ?? 0) + 1;
@@ -554,7 +657,7 @@ Deno.serve(async (req) => {
 
   // Classify + summarize (limit concurrency)
   const rows: any[] = [];
-  const CONCURRENCY = 4;
+  const CONCURRENCY = 2;
   for (let i = 0; i < toProcess.length; i += CONCURRENCY) {
     const batch = toProcess.slice(i, i + CONCURRENCY);
     const done = await Promise.all(
@@ -568,13 +671,16 @@ Deno.serve(async (req) => {
         if (region === "__global__") {
           region = await classifyTerritory(a.title, a.description);
         }
-        const skipFullText = isSiftedUrl(a.url);
+        const resolvedUrl = await resolveArticleUrl(a.url);
+        if (!resolvedUrl) return null;
+
+        const skipFullText = isSiftedUrl(resolvedUrl);
         const [summary, fullText] = await Promise.all([
           summarize(a.title, a.description),
-          skipFullText ? Promise.resolve(null) : extractFullText(a.url),
+          skipFullText ? Promise.resolve(null) : extractFullText(resolvedUrl),
         ]);
         console.log(
-          `extract ${skipFullText ? "skip(sifted)" : fullText ? `ok(${fullText.length})` : "miss"}: ${new URL(a.url).hostname}`,
+          `extract ${skipFullText ? "skip(sifted)" : fullText ? `ok(${fullText.length})` : "miss"}: ${new URL(resolvedUrl).hostname}`,
         );
         const summaryText = (() => {
           const candidate = (summary ?? a.description ?? "").trim();
@@ -590,7 +696,7 @@ Deno.serve(async (req) => {
         };
         return {
           title: a.title,
-          url: a.url,
+          url: resolvedUrl,
           source: a.source,
           summary: summaryText,
           full_text: fullText,

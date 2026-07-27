@@ -17,25 +17,100 @@ const LANG_NAME: Record<string, string> = {
   es: "Spanish", pt: "Portuguese", nl: "Dutch", no: "Norwegian",
 };
 
-const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY")!;
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
+let vertexAccessToken: string | null = null;
+let vertexAccessTokenExpiresAt = 0;
+let vertexPrivateKey: CryptoKey | null = null;
+
+function base64url(data: string | ArrayBuffer): string {
+  const str = typeof data === "string"
+    ? btoa(data)
+    : btoa(String.fromCharCode(...new Uint8Array(data)));
+  return str.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+async function getVertexAccessToken(): Promise<string | null> {
+  if (vertexAccessToken && Date.now() < vertexAccessTokenExpiresAt - 60_000) {
+    return vertexAccessToken;
+  }
+
+  const serviceAccount = JSON.parse(Deno.env.get("GOOGLE_SERVICE_ACCOUNT_JSON")!);
+  const now = Math.floor(Date.now() / 1000);
+  const header = base64url(JSON.stringify({ alg: "RS256", typ: "JWT" }));
+  const payload = base64url(JSON.stringify({
+    iss: serviceAccount.client_email,
+    scope: "https://www.googleapis.com/auth/cloud-platform",
+    aud: "https://oauth2.googleapis.com/token",
+    iat: now,
+    exp: now + 3600,
+  }));
+
+  if (!vertexPrivateKey) {
+    const pemContents = serviceAccount.private_key
+      .replace(/-----BEGIN PRIVATE KEY-----/, "")
+      .replace(/-----END PRIVATE KEY-----/, "")
+      .replace(/\n/g, "");
+    const binaryKey = Uint8Array.from(atob(pemContents), (c) => c.charCodeAt(0));
+    vertexPrivateKey = await crypto.subtle.importKey(
+      "pkcs8", binaryKey,
+      { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
+      false, ["sign"]
+    );
+  }
+
+  const signatureInput = new TextEncoder().encode(`${header}.${payload}`);
+  const signature = await crypto.subtle.sign("RSASSA-PKCS1-v1_5", vertexPrivateKey, signatureInput);
+  const jwt = `${header}.${payload}.${base64url(signature)}`;
+
+  const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: `grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&assertion=${jwt}`,
+  });
+  if (!tokenRes.ok) {
+    const t = await tokenRes.text();
+    console.warn(`Vertex token ${tokenRes.status}: ${t.slice(0, 200)}`);
+    return null;
+  }
+
+  const tokenData = await tokenRes.json();
+  vertexAccessToken = tokenData.access_token ?? null;
+  vertexAccessTokenExpiresAt = Date.now() + ((tokenData.expires_in ?? 3600) * 1000);
+  return vertexAccessToken;
+}
+
 async function callGemini(prompt: string): Promise<string | null> {
   try {
-    const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "Lovable-API-Key": LOVABLE_API_KEY },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
-        messages: [{ role: "user", content: prompt }],
-      }),
-      signal: AbortSignal.timeout(20000),
-    });
-    if (!res.ok) return null;
+    const accessToken = await getVertexAccessToken();
+    if (!accessToken) return null;
+
+    const res = await fetch(
+      "https://us-central1-aiplatform.googleapis.com/v1/projects/tick-502812/locations/us-central1/publishers/google/models/gemini-2.5-flash:generateContent",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({
+          contents: [{ role: "user", parts: [{ text: prompt }] }],
+          generationConfig: { temperature: 0.3, maxOutputTokens: 1024 },
+        }),
+        signal: AbortSignal.timeout(30000),
+      }
+    );
+
+    if (!res.ok) {
+      const t = await res.text();
+      console.warn(`Vertex AI ${res.status}: ${t.slice(0, 200)}`);
+      return null;
+    }
     const data = await res.json();
-    return data?.choices?.[0]?.message?.content?.trim() ?? null;
-  } catch {
+    return data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ?? null;
+  } catch (e) {
+    console.warn("Gemini call failed:", (e as Error).message);
     return null;
   }
 }
@@ -91,6 +166,7 @@ Deno.serve(async (req) => {
     .or("spoken_summary.is.null,article_audio_url.is.null");
 
   let processed = 0, ttsGenerated = 0, failed = 0;
+  const errors: Array<{ id: string; title: string; message: string }> = [];
   for (const row of rows ?? []) {
     try {
       const langCode = (row as any).language ?? "en";
@@ -99,7 +175,12 @@ Deno.serve(async (req) => {
         spoken = await generateSpokenSummary(
           row.title, row.summary ?? "", row.full_text ?? null, langCode,
         );
-        if (!spoken) { failed++; await new Promise(r => setTimeout(r, TTS_DELAY_MS)); continue; }
+        if (!spoken) {
+          failed++;
+          errors.push({ id: row.id, title: row.title, message: "No spoken summary returned from Gemini" });
+          await new Promise(r => setTimeout(r, TTS_DELAY_MS));
+          continue;
+        }
         await supabase.from("articles").update({ spoken_summary: spoken }).eq("id", row.id);
       }
       if (!(row as any).article_audio_url) {
@@ -120,7 +201,9 @@ Deno.serve(async (req) => {
       console.log(`[backfill ${row.id}] ok`);
     } catch (e) {
       failed++;
-      console.warn(`[backfill ${row.id}] failed:`, (e as Error).message);
+      const message = (e as Error).message;
+      errors.push({ id: row.id, title: row.title, message });
+      console.warn(`[backfill ${row.id}] failed:`, message);
     }
     await new Promise(r => setTimeout(r, TTS_DELAY_MS));
   }
@@ -128,5 +211,6 @@ Deno.serve(async (req) => {
   return new Response(JSON.stringify({
     ok: true, processed, ttsGenerated, failed,
     remainingBefore, remainingAfter: Math.max(0, (remainingBefore ?? 0) - processed),
+    errors,
   }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
 });

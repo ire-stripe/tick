@@ -5,7 +5,6 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 import { checkCronAuth } from "../_shared/auth.ts";
 
 
-const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY")!;
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
@@ -13,27 +12,74 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
 async function callGemini(prompt: string): Promise<string | null> {
   try {
-    const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const serviceAccount = JSON.parse(Deno.env.get("GOOGLE_SERVICE_ACCOUNT_JSON")!);
+
+    function base64url(data: string | ArrayBuffer): string {
+      const str = typeof data === "string"
+        ? btoa(data)
+        : btoa(String.fromCharCode(...new Uint8Array(data)));
+      return str.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+    }
+
+    const now = Math.floor(Date.now() / 1000);
+    const header = base64url(JSON.stringify({ alg: "RS256", typ: "JWT" }));
+    const payload = base64url(JSON.stringify({
+      iss: serviceAccount.client_email,
+      scope: "https://www.googleapis.com/auth/cloud-platform",
+      aud: "https://oauth2.googleapis.com/token",
+      iat: now,
+      exp: now + 3600,
+    }));
+
+    const pemContents = serviceAccount.private_key
+      .replace(/-----BEGIN PRIVATE KEY-----/, "")
+      .replace(/-----END PRIVATE KEY-----/, "")
+      .replace(/\n/g, "");
+    const binaryKey = Uint8Array.from(atob(pemContents), (c) => c.charCodeAt(0));
+
+    const key = await crypto.subtle.importKey(
+      "pkcs8", binaryKey,
+      { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
+      false, ["sign"]
+    );
+
+    const signatureInput = new TextEncoder().encode(`${header}.${payload}`);
+    const signature = await crypto.subtle.sign("RSASSA-PKCS1-v1_5", key, signatureInput);
+    const jwt = `${header}.${payload}.${base64url(signature)}`;
+
+    const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Lovable-API-Key": LOVABLE_API_KEY,
-      },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
-        messages: [{ role: "user", content: prompt }],
-      }),
-      signal: AbortSignal.timeout(30000),
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: `grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&assertion=${jwt}`,
     });
+    const tokenData = await tokenRes.json();
+    const accessToken = tokenData.access_token;
+
+    const res = await fetch(
+      "https://us-central1-aiplatform.googleapis.com/v1/projects/tick-502812/locations/us-central1/publishers/google/models/gemini-2.5-flash:generateContent",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({
+          contents: [{ role: "user", parts: [{ text: prompt }] }],
+          generationConfig: { temperature: 0.3, maxOutputTokens: 2048 },
+        }),
+        signal: AbortSignal.timeout(30000),
+      }
+    );
+
     if (!res.ok) {
       const t = await res.text();
-      console.warn(`AI gateway ${res.status}: ${t.slice(0, 300)}`);
+      console.warn(`Vertex AI ${res.status}: ${t.slice(0, 200)}`);
       return null;
     }
     const data = await res.json();
-    return data?.choices?.[0]?.message?.content?.trim() ?? null;
+    return data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ?? null;
   } catch (e) {
-    console.warn("AI gateway failed", (e as Error).message);
+    console.warn("Gemini call failed:", (e as Error).message);
     return null;
   }
 }
