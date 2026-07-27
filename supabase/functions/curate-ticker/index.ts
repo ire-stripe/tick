@@ -167,6 +167,14 @@ Deno.serve(async (req) => {
     };
     const candidates = (rawCandidates ?? []).filter(isEnglish).filter(passesPreFilter);
 
+    const STRONG_TICKER_RE =
+      /\b(stripe|adyen|paypal|klarna|revolut|wise|checkout\.com|visa|mastercard|apple pay|google pay|open banking|embedded finance|payments?|wallet|bnpl|banking licence|banking license|acquisition|merger|funding|raises?|raised|series [a-f]|ipo|regulation|regulator|psd3|psr|stablecoin|digital euro|cbdc|merchant|checkout|fraud|fintech)\b/i;
+
+    const isStrongTickerCandidate = (a: any) => {
+      const text = `${a.title ?? ""} ${a.summary ?? ""}`;
+      return STRONG_TICKER_RE.test(text);
+    };
+
     // How many current ticker items are still fresh (<12h)?
     const { count: freshTicker } = await supabase
       .from("articles")
@@ -186,7 +194,7 @@ Deno.serve(async (req) => {
 
     // 3. Ask Gemini to pick the globally significant stories + breaking flags.
     const listText = candidates
-      .map((a: any) => `- id=${a.id} | ${a.title}${a.summary ? " — " + a.summary.slice(0, 200) : ""}`)
+      .map((a: any) => `- id=${a.id} | source=${a.source} | ${a.title}${a.summary ? " — " + a.summary.slice(0, 200) : ""}`)
       .join("\n");
 
     const prompt =
@@ -206,10 +214,11 @@ Deno.serve(async (req) => {
       `- Stock market or trading news (unless it's a fintech IPO)\n` +
       `- Political news that isn't directly about payment regulation\n` +
       `- Anything a payments sales rep couldn't reference in a customer conversation\n\n` +
+      `Prefer a diverse source mix. Do not select more than 2 articles from the same source unless there are no other qualifying stories.\n` +
       `Return ONLY the IDs of qualifying articles as a JSON array of objects with shape ` +
       `[{"id":"<article id>","breaking":true|false}, ...]. Flag "breaking":true for stories with ` +
-      `major breaking-news significance. No prose, no markdown. If fewer than 3 articles qualify, ` +
-      `return an empty array [] — do NOT lower the bar.\n\n` +
+      `major breaking-news significance. No prose, no markdown. Return the best 3-8 qualifying articles. ` +
+      `If only 1-2 genuinely strong articles qualify, return those rather than an empty array. Do not include weak filler.\n\n` +
       `Articles:\n${listText}`;
 
     const raw = await callGemini(prompt);
@@ -218,15 +227,45 @@ Deno.serve(async (req) => {
 
     const candidateMap = new Map(candidates.map((c: any) => [c.id, c]));
     const selected: { id: string; breaking: boolean }[] = [];
+    const selectedBySource = new Map<string, number>();
+
     if (parsed) {
       for (const item of parsed) {
         if (!item) continue;
+
         const id = typeof item === "string" ? item : item.id;
         if (typeof id !== "string") continue;
+
         const cand = candidateMap.get(id);
         if (!cand || !isEnglish(cand)) continue;
+
+        const source = String((cand as any).source ?? "unknown");
+        const sourceCount = selectedBySource.get(source) ?? 0;
+
+        // Keep the ticker mixed: max 2 headlines from any one source.
+        if (sourceCount >= 2) continue;
+
         const breaking = typeof item === "object" && !!item.breaking;
+
+        selectedBySource.set(source, sourceCount + 1);
         selected.push({ id, breaking });
+
+        if (selected.length >= 8) break;
+      }
+    }
+
+    // Fallback: if Gemini is too conservative or returns unusable IDs,
+    // pick strong recent candidates deterministically while preserving source diversity.
+    if (selected.length === 0) {
+      for (const cand of candidates.filter(isStrongTickerCandidate)) {
+        const source = String((cand as any).source ?? "unknown");
+        const sourceCount = selectedBySource.get(source) ?? 0;
+
+        if (sourceCount >= 2) continue;
+
+        selectedBySource.set(source, sourceCount + 1);
+        selected.push({ id: cand.id, breaking: false });
+
         if (selected.length >= 8) break;
       }
     }
