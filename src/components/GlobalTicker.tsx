@@ -18,9 +18,16 @@ export const GlobalTicker = ({ headlines }: { headlines: Headline[] }) => {
     url: "#",
     is_breaking: false,
   }));
-  const source = headlines.length ? headlines : fallback;
+  const seen = new Set<string>();
+  const dedupedHeadlines = headlines.filter((a) => {
+    const key = a.title.toLowerCase().trim();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+  const source = dedupedHeadlines.length ? dedupedHeadlines : fallback;
   const loop = [...source, ...source];
-  const isFallback = headlines.length === 0;
+  const isFallback = dedupedHeadlines.length === 0;
 
   const trackRef = useRef<HTMLDivElement>(null);
   const offsetRef = useRef(0);

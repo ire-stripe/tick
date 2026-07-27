@@ -41,6 +41,23 @@ type FetchedArticle = {
   territory_id: string; // may be "__global__" for global-feed items pending classification
 };
 
+function hasArticlePath(url: string): boolean {
+  try {
+    const urlPath = new URL(url).pathname;
+    return !!urlPath && urlPath !== "/" && urlPath.length >= 5;
+  } catch {
+    return false;
+  }
+}
+
+function isSiftedUrl(url: string): boolean {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "").endsWith("sifted.eu");
+  } catch {
+    return false;
+  }
+}
+
 // ── RSS parsing (tolerant regex — no external deps) ────────────────────────
 const NAMED_ENTITIES: Record<string, string> = {
   amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " ",
@@ -95,6 +112,10 @@ function parseRss(xml: string, sourceHost: string): Array<Omit<FetchedArticle, "
       extractTag(block, "updated") ||
       new Date().toISOString();
     if (!title || !link) continue;
+    if (!hasArticlePath(link)) {
+      console.warn(`RSS ${sourceHost} skipped homepage-only URL: ${link}`);
+      continue;
+    }
     const publishedIso = new Date(pub).toISOString();
     // Skip items with a pubDate older than 3 days — keeps the feed fresh
     // and prevents stale RSS backlogs from polluting the ticker.
@@ -139,8 +160,18 @@ function niceSourceName(host: string): string {
   return map[host] ?? host.charAt(0).toUpperCase() + host.slice(1);
 }
 
+const rssSourceStats: Record<string, { attempts: number; articles: number }> = {};
+
+function recordRssSource(source: string, count: number) {
+  const current = rssSourceStats[source] ?? { attempts: 0, articles: 0 };
+  current.attempts += 1;
+  current.articles += count;
+  rssSourceStats[source] = current;
+}
+
 // ── Fetch helpers ──────────────────────────────────────────────────────────
 async function fetchRss(url: string): Promise<Array<Omit<FetchedArticle, "territory_id">>> {
+  const sourceName = niceSourceName(hostFromUrl(url));
   try {
     const res = await fetch(url, {
       headers: { "User-Agent": "tick-news-bot/1.0 (+https://tick.app)" },
@@ -148,14 +179,16 @@ async function fetchRss(url: string): Promise<Array<Omit<FetchedArticle, "territ
     });
     if (!res.ok) {
       console.warn(`RSS ${url} → ${res.status}`);
+      recordRssSource(sourceName, 0);
       return [];
     }
     const xml = await res.text();
-    const host = hostFromUrl(url);
-    const items = parseRss(xml, niceSourceName(host));
-    return items.slice(0, 15);
+    const items = parseRss(xml, sourceName).slice(0, 15);
+    recordRssSource(sourceName, items.length);
+    return items;
   } catch (e) {
     console.warn(`RSS ${url} failed`, (e as Error).message);
+    recordRssSource(sourceName, 0);
     return [];
   }
 }
@@ -415,6 +448,7 @@ Deno.serve(async (req) => {
   }
 
   const started = Date.now();
+  for (const key of Object.keys(rssSourceStats)) delete rssSourceStats[key];
   console.log(`fetch-news start; sources=${sources}; ${ACTIVE_TERRITORIES.length} territories`);
 
   // Collect from all territories + global (global is RSS only) in parallel
@@ -485,6 +519,7 @@ Deno.serve(async (req) => {
   });
 
   console.log(`collected=${all.length} unique=${unique.length} fresh=${fresh.length}`);
+  console.log("rss source distribution:", rssSourceStats);
 
   // Round-robin interleave by territory so every region gets a fair share within the cap.
   // Global-feed items (pending classification) go last.
@@ -533,11 +568,19 @@ Deno.serve(async (req) => {
         if (region === "__global__") {
           region = await classifyTerritory(a.title, a.description);
         }
+        const skipFullText = isSiftedUrl(a.url);
         const [summary, fullText] = await Promise.all([
           summarize(a.title, a.description),
-          extractFullText(a.url),
+          skipFullText ? Promise.resolve(null) : extractFullText(a.url),
         ]);
-        console.log(`extract ${fullText ? `ok(${fullText.length})` : "miss"}: ${new URL(a.url).hostname}`);
+        console.log(
+          `extract ${skipFullText ? "skip(sifted)" : fullText ? `ok(${fullText.length})` : "miss"}: ${new URL(a.url).hostname}`,
+        );
+        const summaryText = (() => {
+          const candidate = (summary ?? a.description ?? "").trim();
+          if (!candidate || normTitle(candidate) === normTitle(a.title)) return a.title;
+          return candidate;
+        })();
         const SOURCE_LANG: Record<string, string> = {
           "NOS": "nl", "NRC": "nl", "NU.nl": "nl",
           "La Repubblica": "it", "Il Sole 24 Ore": "it",
@@ -549,7 +592,7 @@ Deno.serve(async (req) => {
           title: a.title,
           url: a.url,
           source: a.source,
-          summary: summary ?? a.description.slice(0, 400) ?? null,
+          summary: summaryText,
           full_text: fullText,
           region,
           language: SOURCE_LANG[a.source] ?? "en",
@@ -632,6 +675,7 @@ Deno.serve(async (req) => {
     processed: toProcess.length,
     inserted,
     ttsGenerated,
+    rssSourceStats,
   };
   console.log("fetch-news done", summary);
   return new Response(JSON.stringify(summary), {

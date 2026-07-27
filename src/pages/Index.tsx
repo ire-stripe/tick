@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Settings as SettingsIcon } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
@@ -13,8 +13,6 @@ import { loadSettings } from "@/lib/userSettings";
 
 
 const Index = () => {
-  const closeTimerRef = useRef<number | null>(null);
-  const clearPanelTimerRef = useRef<number | null>(null);
   const [counts, setCounts] = useState<Record<string, number>>({});
   const [headlines, setHeadlines] = useState<any[]>([]);
   const [ambient, setAmbient] = useState<{ title: string; region: RegionId }[]>([]);
@@ -26,7 +24,6 @@ const Index = () => {
   const [hasSelected, setHasSelected] = useState(false);
   const [enabledRegions, setEnabledRegions] = useState<string[]>(() => loadSettings().regions);
   const { episode: activeEpisode } = useAudioPlayer();
-  const ambientCutoff = new Date(Date.now() - 72 * 60 * 60 * 1000).toISOString();
 
   // Reload whenever the page regains focus (e.g. returning from /settings).
   useEffect(() => {
@@ -57,31 +54,46 @@ const Index = () => {
       if (!articles) return;
 
       const norm = (t: string) => (t || "").toLowerCase().replace(/\s+/g, " ").trim();
+      const dedupeByTitle = (list: any[]) => {
+        const seen = new Set<string>();
+        return list.filter((a) => {
+          const key = norm(a.title);
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        });
+      };
       const byRegion: Record<string, any[]> = {};
       REGION_IDS.forEach((r) => (byRegion[r] = []));
       articles.forEach((a: any) => {
         if (byRegion[a.region]) byRegion[a.region].push(a);
       });
+      const globalToday = articles.filter(
+        (a: any) => a.region === "global" && a.published_at >= todayIso,
+      );
 
       const c: Record<string, number> = {};
       REGION_IDS.forEach((r) => {
         const list = byRegion[r] ?? [];
-        const seen = new Set<string>();
-        const dedupe = (arr: any[]) =>
-          arr.filter((a) => {
-            const k = norm(a.title);
-            if (seen.has(k)) return false;
-            seen.add(k);
-            return true;
-          });
-        const todays = list.filter((a) => a.published_at >= todayIso);
-        const latest = dedupe(todays.filter((a) => !a.is_in_brief)).slice(0, 50);
-        const brief = dedupe(todays.filter((a) => a.is_in_brief)).slice(0, 8);
-        let total = latest.length + brief.length;
-        if (total === 0) {
-          total = dedupe(list).slice(0, 10).length;
+        let latest = dedupeByTitle(
+          list.filter((a) => !a.is_in_brief && a.published_at >= todayIso),
+        ).slice(0, 50);
+        const brief = dedupeByTitle(list.filter((a) => a.is_in_brief)).slice(0, 8);
+
+        if (latest.length === 0 && brief.length === 0) {
+          c[r] = dedupeByTitle(list).slice(0, 10).length;
+          return;
         }
-        c[r] = total;
+
+        if (latest.length < 3) {
+          const seenIds = new Set(latest.map((a) => a.id));
+          const extra = dedupeByTitle(globalToday)
+            .filter((a) => !seenIds.has(a.id))
+            .slice(0, 3 - latest.length);
+          latest = dedupeByTitle([...latest, ...extra]);
+        }
+
+        c[r] = latest.length + brief.length;
       });
 
       setCounts(c);
@@ -93,8 +105,15 @@ const Index = () => {
       const tickerPool = articles.filter(
         (a: any) => a.ticker_source && (a.language ?? "en") === "en" && a.global_ticker,
       );
+      const seenTicker = new Set<string>();
       const headlinesOut = tickerPool
         .filter((a: any) => now - new Date(a.published_at).getTime() <= H72)
+        .filter((a: any) => {
+          const key = norm(a.title);
+          if (seenTicker.has(key)) return false;
+          seenTicker.add(key);
+          return true;
+        })
         .slice(0, 8);
       setHeadlines(headlinesOut);
 
@@ -102,23 +121,15 @@ const Index = () => {
       // deduped by title. Shown one at a time near their region's dot.
       const seenAmb = new Set<string>();
       const ambientOut: { title: string; region: RegionId }[] = [];
-      const regionAmbCount: Record<string, number> = {};
-
       articles.forEach((a: any) => {
-        if (a.published_at < ambientCutoff) return;
+        if (a.published_at < todayIso) return;
         if (!REGION_IDS.includes(a.region)) return;
-        const count = regionAmbCount[a.region] ?? 0;
-        if (count >= 5) return;
         const key = (a.title || "").toLowerCase().trim();
         if (!key || seenAmb.has(key)) return;
         seenAmb.add(key);
-        regionAmbCount[a.region] = count + 1;
         ambientOut.push({ title: a.title, region: a.region as RegionId });
       });
       setAmbient(ambientOut);
-      console.log("ambient headlines:", ambientOut.length, ambientOut);
-      console.log("articles within cutoff:", articles.filter(a => a.published_at >= ambientCutoff).length);
-      console.log("sample regions:", [...new Set(articles.slice(0, 50).map(a => a.region))]);
 
 
       setRefreshedAt(new Date());
@@ -130,15 +141,6 @@ const Index = () => {
   const minsAgo = Math.max(1, Math.floor((Date.now() - refreshedAt.getTime()) / 60000));
 
   const handleSelectRegion = (id: RegionId) => {
-    if (closeTimerRef.current) {
-      window.clearTimeout(closeTimerRef.current);
-      closeTimerRef.current = null;
-    }
-    if (clearPanelTimerRef.current) {
-      window.clearTimeout(clearPanelTimerRef.current);
-      clearPanelTimerRef.current = null;
-    }
-
     setActiveRegion(id);
     setPanelRegion(id);
     setPanelOpen(true);
@@ -146,20 +148,10 @@ const Index = () => {
   };
 
   const handleClose = () => {
+    // Panel fades first, then map zooms out (100ms later)
     setPanelOpen(false);
-
-    if (closeTimerRef.current) window.clearTimeout(closeTimerRef.current);
-    if (clearPanelTimerRef.current) window.clearTimeout(clearPanelTimerRef.current);
-
-    closeTimerRef.current = window.setTimeout(() => {
-      setActiveRegion(null);
-      closeTimerRef.current = null;
-    }, 100);
-
-    clearPanelTimerRef.current = window.setTimeout(() => {
-      setPanelRegion(null);
-      clearPanelTimerRef.current = null;
-    }, 350);
+    window.setTimeout(() => setActiveRegion(null), 100);
+    window.setTimeout(() => setPanelRegion(null), 350);
   };
 
   return (

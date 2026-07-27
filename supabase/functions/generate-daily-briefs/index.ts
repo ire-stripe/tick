@@ -468,7 +468,22 @@ async function processOne(t: Territory, lang: Language, todayIso: string, sinceH
     .order("published_at", { ascending: false })
     .limit(7);
   if (error) throw error;
-  if (!articles || articles.length < 3) {
+
+  if (articles && articles.length < 3) {
+    const { data: globals, error: globalsError } = await supabase
+      .from("articles")
+      .select("id,title,source,summary,full_text,published_at")
+      .eq("region", "global")
+      .gte("published_at", since)
+      .order("published_at", { ascending: false })
+      .limit(3 - articles.length);
+    if (globalsError) throw globalsError;
+    if (globals?.length) {
+      articles.push(...globals);
+    }
+  }
+
+  if (!articles || articles.length < 1) {
     console.log(`[${t.id}/${lang.code}] skip — only ${articles?.length ?? 0} articles`);
     return { territory: t.id, lang: lang.code, skipped: true };
   }
