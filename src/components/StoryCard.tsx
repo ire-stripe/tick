@@ -32,10 +32,12 @@ export const StoryCard = ({
   story,
   showListen,
   stripeAccent,
+  proofPointUrl,
 }: {
   story: Story;
   showListen?: boolean;
   stripeAccent?: boolean;
+  proofPointUrl?: string;
 }) => {
   const [playing, setPlaying] = useState(false);
 
@@ -101,7 +103,18 @@ export const StoryCard = ({
 
           {proofPoint && (
             <p className="mt-2 border-l border-[rgba(218,165,32,0.35)] pl-2 text-[11px] leading-relaxed text-zinc-400">
-              📊 “{proofPoint}”
+              {proofPointUrl ? (
+                <a
+                  href={proofPointUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline-offset-2 transition-colors hover:text-zinc-300 hover:underline"
+                >
+                  📊 “{proofPoint}”
+                </a>
+              ) : (
+                <>📊 “{proofPoint}”</>
+              )}
             </p>
           )}
         </div>

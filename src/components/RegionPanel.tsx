@@ -16,6 +16,7 @@ export const RegionPanel = ({ regionId, open, onClose }: Props) => {
   const [latest, setLatest] = useState<Story[]>([]);
   const [today, setToday] = useState<Story[]>([]);
   const [episodes, setEpisodes] = useState<any[]>([]);
+  const [successStoryUrls, setSuccessStoryUrls] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [visibleCount, setVisibleCount] = useState(15);
   const meta = REGIONS[regionId];
@@ -75,6 +76,7 @@ export const RegionPanel = ({ regionId, open, onClose }: Props) => {
     setLatest([]);
     setToday([]);
     setEpisodes([]);
+    setSuccessStoryUrls({});
     const load = async () => {
 
       const startOfTodayUtc = new Date();
@@ -129,6 +131,31 @@ export const RegionPanel = ({ regionId, open, onClose }: Props) => {
           .filter((a) => !seen.has(a.id))
           .slice(0, 3 - latestList.length);
         latestList = dedupeByTitle([...latestList, ...extra]);
+      }
+
+      const successStoryIds = Array.from(
+        new Set(
+          [...latestList, ...todayList]
+            .map((story) => story.success_story_id)
+            .filter((id): id is string => !!id),
+        ),
+      );
+
+      if (successStoryIds.length > 0) {
+        const { data: successStories } = await supabase
+          .from("success_stories")
+          .select("id,url")
+          .in("id", successStoryIds);
+
+        if (cancelled) return;
+
+        setSuccessStoryUrls(
+          Object.fromEntries(
+            ((successStories ?? []) as { id: string; url: string | null }[])
+              .filter((story) => !!story.url)
+              .map((story) => [story.id, story.url as string]),
+          ),
+        );
       }
 
       // Keep only the most recent episode per language.
@@ -192,6 +219,8 @@ export const RegionPanel = ({ regionId, open, onClose }: Props) => {
   };
 
   const displayMeta = REGIONS[displayRegion];
+  const getProofPointUrl = (story: Story) =>
+    story.success_story_id ? successStoryUrls[story.success_story_id] : undefined;
 
   return (
     <aside
@@ -259,7 +288,12 @@ export const RegionPanel = ({ regionId, open, onClose }: Props) => {
               ) : (
                 <>
                   {latest.slice(0, visibleCount).map((s) => (
-                    <StoryCard key={s.id} story={s} showListen />
+                    <StoryCard
+                      key={s.id}
+                      story={s}
+                      showListen
+                      proofPointUrl={getProofPointUrl(s)}
+                    />
                   ))}
                   {latest.length > visibleCount && visibleCount < MAX_LATEST && (
                     <button
@@ -290,6 +324,7 @@ export const RegionPanel = ({ regionId, open, onClose }: Props) => {
                     key={s.id}
                     story={s}
                     stripeAccent={s.source.toLowerCase() === "stripe"}
+                    proofPointUrl={getProofPointUrl(s)}
                   />
                 ))
               )}
