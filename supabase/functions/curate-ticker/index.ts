@@ -143,7 +143,7 @@ Deno.serve(async (req) => {
     const tickerCutoff = new Date(Date.now() - 72 * 60 * 60 * 1000).toISOString();
     const { data: rawCandidates, error: candErr } = await supabase
       .from("articles")
-      .select("id,title,summary,source,region,published_at,language,ticker_source")
+      .select("id,title,summary,url,source,region,published_at,language,ticker_source")
       .gte("published_at", tickerCutoff)
       .eq("ticker_source", true)
       .eq("global_ticker", false)
@@ -153,17 +153,22 @@ Deno.serve(async (req) => {
     if (candErr) throw candErr;
     const EXCLUDE_PATTERNS = [
       "webinar",
+      "join this webinar",
+      "register for this webinar",
       "register now",
       "event-info",
+      "/event-info/",
+      "/events/",
       "sponsored",
       "podcast",
       "opinion:",
       "how to",
       "why you should",
     ];
+
     const passesPreFilter = (a: any) => {
-      const title = (a.title ?? "").toLowerCase();
-      return !EXCLUDE_PATTERNS.some((p) => title.includes(p));
+      const text = `${a.title ?? ""} ${a.summary ?? ""} ${a.url ?? ""}`.toLowerCase();
+      return !EXCLUDE_PATTERNS.some((p) => text.includes(p));
     };
     const candidates = (rawCandidates ?? []).filter(isEnglish).filter(passesPreFilter);
 

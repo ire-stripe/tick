@@ -104,13 +104,11 @@ canvas {
 }
 
 .ticker-perspective {
-  perspective: 600px;
-  perspective-origin: 50% 0%;
+  perspective: none;
 }
+
 .ticker-tilt {
-  transform: rotateX(2deg);
-  transform-origin: 50% 100%;
-  will-change: transform;
+  transform: none;
 }
 
 
@@ -124,3 +122,30 @@ canvas {
   to { transform: translateX(0); opacity: 1; }
 }
 
+.ticker-track {
+  animation: ticker-scroll 70s linear infinite;
+  will-change: transform;
+  transform: translate3d(0, 0, 0);
+  backface-visibility: hidden;
+  contain: layout paint;
+}
+
+.ticker-track:hover {
+  animation-play-state: paused;
+}
+
+@keyframes ticker-scroll {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(-50%, 0, 0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ticker-track {
+    animation: none;
+    transform: none;
+  }
+}

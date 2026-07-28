@@ -141,6 +141,8 @@ function parseRss(xml: string, source: string, kind: FeedKind): Item[] {
     const description = extractTag(block, "description") || extractTag(block, "summary") || "";
     const pub = extractTag(block, "pubDate") || extractTag(block, "published") || extractTag(block, "updated") || new Date().toISOString();
     if (!title || !link) continue;
+    if (!isTickerArticleUrl(link)) continue;
+    if (!isTickerArticleText(title, description)) continue;
     const publishedIso = new Date(pub).toISOString();
     const ageMs = Date.now() - new Date(publishedIso).getTime();
     const maxAge = kind === "newsletter" ? 7 * 24 * 60 * 60 * 1000 : 7 * 24 * 60 * 60 * 1000;
@@ -166,6 +168,27 @@ function parseRss(xml: string, source: string, kind: FeedKind): Item[] {
     });
   }
   return items.slice(0, 20);
+}
+
+
+function isTickerArticleUrl(url: string): boolean {
+  const u = url.toLowerCase();
+  return !(
+    u.includes("/event-info/") ||
+    u.includes("/events/") ||
+    u.includes("/webinar") ||
+    u.includes("webinar")
+  );
+}
+
+function isTickerArticleText(title: string, description: string): boolean {
+  const text = `${title} ${description}`.toLowerCase();
+  return !(
+    text.includes("webinar") ||
+    text.includes("join this webinar") ||
+    text.includes("register for this webinar") ||
+    text.includes("register now")
+  );
 }
 
 async function fetchFeed(url: string, source: string, kind: FeedKind): Promise<Item[]> {
