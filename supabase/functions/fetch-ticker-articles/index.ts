@@ -90,7 +90,6 @@ const TICKER_FEEDS: { url: string; source: string; kind: FeedKind }[] = [
   { url: "https://www.fintechfutures.com/feed/", source: "FinTech Futures", kind: "standard" },
   { url: "https://ffnews.com/feed/", source: "FF News", kind: "standard" },
   { url: "https://thefintechtimes.com/feed/", source: "The Fintech Times", kind: "standard" },
-  { url: "https://www.pymnts.com/feed/", source: "PYMNTS", kind: "standard" },
   { url: "https://www.eu-startups.com/feed/", source: "EU-Startups", kind: "standard" },
   { url: "https://tech.eu/feed", source: "Tech.eu", kind: "standard" },
   { url: "https://www.connectingthedotsinfin.tech/rss/", source: "Connecting the Dots in Fintech", kind: "newsletter" },

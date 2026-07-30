@@ -274,6 +274,29 @@ async function resolveArticleUrl(url: string): Promise<string | null> {
   }
 }
 
+function looksGatedHtml(html: string): boolean {
+  const text = html
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ")
+    .toLowerCase();
+
+  return [
+    "get the full story",
+    "complete the form to unlock this article",
+    "unlock this article",
+    "subscribe to continue reading",
+    "sign in to continue reading",
+    "register to continue reading",
+    "create an account to continue reading",
+    "already a subscriber",
+    "premium content",
+    "members only",
+    "subscriber-only",
+  ].some((p) => text.includes(p));
+}
+
 // ── Article body extraction ────────────────────────────────────────────────
 // Fetch the article URL and pull the main body text. Strips scripts/styles
 // and prefers <article> or <main>; falls back to concatenated <p> tags.
@@ -290,6 +313,7 @@ async function extractFullText(url: string): Promise<string | null> {
     const ct = res.headers.get("content-type") ?? "";
     if (!ct.includes("html")) return null;
     let html = await res.text();
+    if (looksGatedHtml(html)) return null;
     // Strip noisy blocks first
     html = html
       .replace(/<script[\s\S]*?<\/script>/gi, " ")
@@ -445,9 +469,9 @@ async function classifyTerritory(title: string, description: string): Promise<st
 // payments, banking, or financial technology. Uses a cheap AI call so junk
 // from broad feeds (general news, sports, entertainment) never gets inserted.
 async function isFintechRelevant(title: string, description: string): Promise<boolean> {
-  // Cheap keyword pre-pass: obvious fintech terms skip the AI call.
   const hay = `${title}\n${description}`.toLowerCase();
-  const KW = [
+
+  const FINTECH_KW = [
     "fintech", "payment", "payments", "neobank", "open banking", "banking",
     "bank ", "banks ", "stripe", "paypal", "visa", "mastercard", "adyen",
     "klarna", "revolut", "wise", "monzo", "n26", "starling", "checkout.com",
@@ -455,16 +479,37 @@ async function isFintechRelevant(title: string, description: string): Promise<bo
     "lending", "loan", "mortgage", "credit card", "debit card", "acquirer",
     "issuer", "merchant", "pos ", "psp ", "swift", "sepa", "iso 20022",
     "embedded finance", "bnpl", "buy now pay later", "kyc", "aml",
-    "fca", "occ", "ecb", "federal reserve", "central bank", "ipo",
-    "series a", "series b", "series c", "series d", "funding round",
-    "raised $", "raises $", "acquires", "acquisition", "merger",
+    "fca", "occ", "ecb", "federal reserve", "central bank",
   ];
-  if (KW.some((k) => hay.includes(k))) return true;
+
+  const DEAL_KW = [
+    "ipo",
+    "series a",
+    "series b",
+    "series c",
+    "series d",
+    "funding round",
+    "raised $",
+    "raises $",
+    "acquires",
+    "acquisition",
+    "merger",
+  ];
+
+  const hasFintech = FINTECH_KW.some((k) => hay.includes(k));
+  const hasDeal = DEAL_KW.some((k) => hay.includes(k));
+
+  if (hasFintech) return true;
+
+  // Generic fundraising / M&A is not enough for tick.
+  if (hasDeal && !hasFintech) return false;
 
   const prompt =
-    `Is this news article about fintech, payments, banking, or financial technology? ` +
+    `Is this news article specifically about fintech, payments, banking, or financial technology? ` +
+    `Reject generic startup, AI, SaaS, enterprise software, funding, M&A, or macro/business stories unless the article is clearly about fintech/payments/banking. ` +
     `Answer with ONLY "yes" or "no". No explanation.\n\n` +
     `Title: ${title}\nDescription: ${description}`;
+
   const out = (await callGemini(prompt))?.toLowerCase().trim() ?? "";
   return out.startsWith("yes");
 }
