@@ -39,12 +39,22 @@ export const AudioPlayer = ({ episodes, languages, regionId, regionName, regionF
 
   const [lang, setLang] = useState<string>(() => {
     if (player.episode && player.episode.regionId === regionId) return player.episode.languageCode;
+
     const prefs = loadSettings();
     if (prefs.language === "local") {
       const local = langs.find((l) => l.code !== "en");
       if (local) return local.code;
     }
+
     return langs[0].code;
+  });
+
+  const [voice, setVoiceState] = useState<Voice>(() => {
+    if (player.episode && player.episode.regionId === regionId && player.episode.voice) {
+      return player.episode.voice;
+    }
+
+    return loadSettings().voice;
   });
 
   useEffect(() => {
@@ -61,15 +71,15 @@ export const AudioPlayer = ({ episodes, languages, regionId, regionName, regionF
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [regionId]);
-  
-  useEffect(() => {
-  if (player.episode && player.episode.regionId === regionId && player.episode.voice) {
-    setVoiceState(player.episode.voice);
-    return;
-  }
 
-  setVoiceState(loadSettings().voice);
-}, [regionId, player.episode]);
+  useEffect(() => {
+    if (player.episode && player.episode.regionId === regionId && player.episode.voice) {
+      setVoiceState(player.episode.voice);
+      return;
+    }
+
+    setVoiceState(loadSettings().voice);
+  }, [regionId, player.episode]);
 
   // IMPORTANT: do NOT fall back across languages here. If the selected language
   // has no episode row, we intentionally return null so the UI can show
@@ -85,17 +95,9 @@ export const AudioPlayer = ({ episodes, languages, regionId, regionName, regionF
   const date = episode?.date ?? new Date().toISOString();
   const durationHint = episode?.duration_seconds ?? null;
 
-  const [voice, setVoiceState] = useState<Voice>(() => {
-  if (player.episode && player.episode.regionId === regionId && player.episode.voice) {
-    return player.episode.voice;
-  }
-  return loadSettings().voice;
-});
-
   // Voice fallback within the same language is fine (male → female).
   const audioUrl = voice === "male" ? (maleUrl ?? femaleUrl) : (femaleUrl ?? maleUrl);
   const effectiveVoice: Voice = voice === "male" && maleUrl ? "male" : "female";
-
 
   const isActive = !!(
     player.episode &&
@@ -105,38 +107,39 @@ export const AudioPlayer = ({ episodes, languages, regionId, regionName, regionF
     player.episode.languageCode === episode.language_code &&
     player.episode.audioUrl === audioUrl
   );
+
   const currentTime = isActive ? player.currentTime : 0;
   const total = isActive ? player.duration || durationHint || 0 : durationHint || 0;
   const playing = isActive && player.playing;
 
   const setVoice = (v: Voice) => {
-  const nextUrl = v === "male" ? maleUrl : femaleUrl;
+    const nextUrl = v === "male" ? maleUrl : femaleUrl;
 
-  // Male may not have been generated yet.
-  if (!nextUrl) return;
+    // Male may not have been generated yet.
+    if (!nextUrl) return;
 
-  setVoiceState(v);
-  saveSettings({ ...loadSettings(), voice: v });
+    setVoiceState(v);
+    saveSettings({ ...loadSettings(), voice: v });
 
-  // If the current brief is already active, switch voice explicitly because the
-  // user clicked the toggle. Do not rely on a remount/useEffect to change audio.
-  if (isActive && episode) {
-    player.play({
-      audioUrl: nextUrl,
-      regionId,
-      regionName,
-      regionFlags,
-      languageCode: episode.language_code,
-      date: episode.date,
-      duration: episode.duration_seconds,
-      voice: v,
-    });
-  }
-};
-
+    // If the current brief is already active, switch voice explicitly because the
+    // user clicked the toggle. Do not rely on a remount/useEffect to change audio.
+    if (isActive && episode) {
+      player.play({
+        audioUrl: nextUrl,
+        regionId,
+        regionName,
+        regionFlags,
+        languageCode: episode.language_code,
+        date: episode.date,
+        duration: episode.duration_seconds,
+        voice: v,
+      });
+    }
+  };
 
   const toggle = () => {
     if (!audioUrl || !episode) return;
+
     if (isActive) {
       player.toggle();
     } else {
@@ -156,13 +159,19 @@ export const AudioPlayer = ({ episodes, languages, regionId, regionName, regionF
   const ordinal = (n: number) => {
     const v = n % 100;
     if (v >= 11 && v <= 13) return `${n}th`;
+
     switch (n % 10) {
-      case 1: return `${n}st`;
-      case 2: return `${n}nd`;
-      case 3: return `${n}rd`;
-      default: return `${n}th`;
+      case 1:
+        return `${n}st`;
+      case 2:
+        return `${n}nd`;
+      case 3:
+        return `${n}rd`;
+      default:
+        return `${n}th`;
     }
   };
+
   const _d = new Date(date);
   const _weekday = _d.toLocaleDateString(undefined, { weekday: "long" });
   const _month = _d.toLocaleDateString(undefined, { month: "short" });
@@ -172,12 +181,15 @@ export const AudioPlayer = ({ episodes, languages, regionId, regionName, regionF
 
   const [transcriptOpen, setTranscriptOpen] = useState(false);
   const [copied, setCopied] = useState(false);
+
   useEffect(() => {
     setTranscriptOpen(false);
     setCopied(false);
   }, [regionId, lang]);
+
   const copyTranscript = async () => {
     if (!displayScript) return;
+
     try {
       await navigator.clipboard.writeText(displayScript);
       setCopied(true);
@@ -188,32 +200,38 @@ export const AudioPlayer = ({ episodes, languages, regionId, regionName, regionF
   const pillClass = (active: boolean, disabled = false) =>
     "px-2.5 py-0.5 rounded-full text-[10px] font-semibold tracking-wider border transition-colors " +
     (disabled
-      ? "bg-transparent text-muted-foreground/40 border-white/10 cursor-not-allowed"
+      ? "bg-transparent text-muted-foreground/40 border-border/70 cursor-not-allowed dark:border-white/10"
       : active
         ? "bg-primary text-primary-foreground border-primary"
-        : "bg-transparent text-muted-foreground border-white/15 hover:text-foreground hover:border-white/30");
+        : "bg-background/50 text-muted-foreground border-border hover:bg-secondary/70 hover:text-foreground hover:border-primary/45 dark:bg-transparent dark:border-white/15 dark:hover:border-white/30");
 
   const maleDisabled = !maleUrl;
 
   return (
     <div className="glass rounded-2xl p-6 md:p-8">
-      <div className="text-xs uppercase tracking-widest text-muted-foreground mb-1">
+      <div className="mb-1 text-xs uppercase tracking-widest text-muted-foreground">
         🎙️ Morning Brief
       </div>
-      <h2 className="font-serifDisplay text-xl md:text-2xl leading-none mb-3">
+
+      <h2 className="font-serifDisplay mb-3 text-xl leading-none md:text-2xl">
         {dateLabel}
       </h2>
 
-      <div className="flex items-center gap-2 mb-5">
+      <div className="mb-5 flex items-center gap-2">
         {langs.length > 1 && (
           <div className="flex gap-1.5">
             {langs.map((l) => (
-              <button key={l.code} onClick={() => setLang(l.code)} className={pillClass(lang === l.code)}>
+              <button
+                key={l.code}
+                onClick={() => setLang(l.code)}
+                className={pillClass(lang === l.code)}
+              >
                 {l.label}
               </button>
             ))}
           </div>
         )}
+
         <div className="ml-auto flex gap-1.5">
           <button
             type="button"
@@ -222,6 +240,7 @@ export const AudioPlayer = ({ episodes, languages, regionId, regionName, regionF
           >
             Female
           </button>
+
           <button
             type="button"
             onClick={() => setVoice("male")}
@@ -235,21 +254,26 @@ export const AudioPlayer = ({ episodes, languages, regionId, regionName, regionF
         </div>
       </div>
 
-
       {audioUrl ? (
         <div className="flex items-center gap-5">
           <button
             onClick={toggle}
             aria-label={playing ? "Pause" : "Play"}
-            className="h-14 w-14 shrink-0 rounded-full bg-primary text-primary-foreground flex items-center justify-center hover:scale-105 transition-transform"
+            className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground transition-transform hover:scale-105"
           >
             {playing ? (
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                <rect x="6" y="5" width="4" height="14" rx="1" />
+                <rect x="14" y="5" width="4" height="14" rx="1" />
+              </svg>
             ) : (
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M8 5v14l11-7z" />
+              </svg>
             )}
           </button>
-          <div className="flex-1 min-w-0">
+
+          <div className="min-w-0 flex-1">
             <AudioProgressBar
               currentTime={currentTime}
               duration={total}
@@ -257,30 +281,42 @@ export const AudioPlayer = ({ episodes, languages, regionId, regionName, regionF
                 if (isActive) player.seek(t);
               }}
             />
-            <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground tabular-nums">
+
+            <div className="mt-2 flex items-center justify-between text-xs tabular-nums text-muted-foreground">
               <span>{fmt(currentTime)} / {fmt(total || 0)}</span>
+
               <div className="flex gap-1">
-                {[1, 1.5, 2].map((r) => (
-                  <Button
-                    key={r}
-                    size="sm"
-                    variant={player.speed === r ? "default" : "ghost"}
-                    className="h-6 px-2 text-[10px]"
-                    onClick={() => player.setSpeed(r)}
-                  >
-                    {r}x
-                  </Button>
-                ))}
+                {[1, 1.5, 2].map((r) => {
+                  const active = player.speed === r;
+
+                  return (
+                    <Button
+                      key={r}
+                      size="sm"
+                      variant="ghost"
+                      className={
+                        "h-6 border px-2 text-[10px] transition-colors " +
+                        (active
+                          ? "border-primary bg-primary text-primary-foreground hover:bg-primary/90"
+                          : "border-border bg-background/50 text-muted-foreground hover:bg-secondary/70 hover:text-foreground dark:border-white/10 dark:bg-transparent dark:hover:bg-white/5")
+                      }
+                      onClick={() => player.setSpeed(r)}
+                    >
+                      {r}x
+                    </Button>
+                  );
+                })}
               </div>
             </div>
           </div>
         </div>
       ) : displayScript ? (
         <div>
-          <div className="text-[11px] uppercase tracking-widest text-muted-foreground mb-2">
+          <div className="mb-2 text-[11px] uppercase tracking-widest text-muted-foreground">
             Read the briefing (audio unavailable)
           </div>
-          <div className="max-h-72 overflow-y-auto pr-2 text-sm leading-relaxed text-foreground/90 whitespace-pre-wrap">
+
+          <div className="max-h-72 overflow-y-auto whitespace-pre-wrap pr-2 text-sm leading-relaxed text-foreground/90">
             {displayScript}
           </div>
         </div>
@@ -291,32 +327,39 @@ export const AudioPlayer = ({ episodes, languages, regionId, regionName, regionF
       )}
 
       {audioUrl && displayScript && (
-        <div className="mt-4 pt-3 border-t border-white/5">
+        <div className="mt-4 border-t border-border pt-3 dark:border-white/5">
           <button
             type="button"
             onClick={() => setTranscriptOpen((v) => !v)}
-            className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+            className="text-xs text-muted-foreground transition-colors hover:text-foreground"
           >
             {transcriptOpen ? "Hide transcript" : "Show transcript"}
           </button>
+
           {transcriptOpen && (
-            <div className="mt-3 relative rounded-lg bg-white/[0.03] border border-white/5 p-3 pr-10">
+            <div className="relative mt-3 rounded-lg border border-border bg-secondary/45 p-3 pr-10 dark:border-white/5 dark:bg-white/[0.03]">
               <button
                 type="button"
                 onClick={copyTranscript}
                 aria-label="Copy transcript"
-                className="absolute top-2 right-2 h-7 w-7 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-white/5 transition-colors"
+                className="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-background/70 hover:text-foreground dark:hover:bg-white/5"
                 title={copied ? "Copied!" : "Copy transcript"}
               >
-                {copied ? <Check className="h-3.5 w-3.5 text-primary" /> : <Copy className="h-3.5 w-3.5" />}
+                {copied ? (
+                  <Check className="h-3.5 w-3.5 text-primary" />
+                ) : (
+                  <Copy className="h-3.5 w-3.5" />
+                )}
               </button>
+
               {copied && (
-                <div className="absolute top-10 right-2 text-[10px] px-1.5 py-0.5 rounded bg-foreground text-background">
+                <div className="absolute right-2 top-10 rounded bg-foreground px-1.5 py-0.5 text-[10px] text-background">
                   Copied!
                 </div>
               )}
+
               <div
-                className="max-h-[300px] overflow-y-auto text-muted-foreground whitespace-pre-wrap"
+                className="max-h-[300px] overflow-y-auto whitespace-pre-wrap text-foreground/80 dark:text-muted-foreground"
                 style={{ fontSize: 14, lineHeight: 1.6 }}
               >
                 {displayScript}
@@ -326,6 +369,5 @@ export const AudioPlayer = ({ episodes, languages, regionId, regionName, regionF
         </div>
       )}
     </div>
-
   );
 };
