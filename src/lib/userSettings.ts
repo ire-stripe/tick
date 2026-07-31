@@ -1,4 +1,4 @@
-import { REGION_IDS } from "@/lib/regions";
+import { REGION_IDS, type RegionId } from "@/lib/regions";
 
 export const SETTINGS_KEY = "tick.settings";
 
@@ -7,7 +7,7 @@ export type LanguagePref = "en" | "local";
 export type ThemePref = "dark" | "light";
 
 export type UserSettings = {
-  regions: string[];
+  regions: RegionId[];
   slack: boolean;
   voice: VoicePref;
   language: LanguagePref;
@@ -15,7 +15,7 @@ export type UserSettings = {
 };
 
 export const DEFAULT_SETTINGS: UserSettings = {
-  regions: REGION_IDS,
+  regions: [...REGION_IDS],
   slack: false,
   voice: "female",
   language: "en",
@@ -24,24 +24,57 @@ export const DEFAULT_SETTINGS: UserSettings = {
 
 export function applyTheme(theme: ThemePref) {
   try {
-    document.documentElement.classList.toggle("light", theme === "light");
-    document.documentElement.classList.toggle("dark", theme === "dark");
+    if (typeof document === "undefined") return;
+
+    const root = document.documentElement;
+
+    root.classList.toggle("light", theme === "light");
+    root.classList.toggle("dark", theme === "dark");
+    root.style.colorScheme = theme;
   } catch {}
 }
 
 export function loadSettings(): UserSettings {
   try {
+    if (typeof localStorage === "undefined") return DEFAULT_SETTINGS;
+
     const raw = localStorage.getItem(SETTINGS_KEY);
+
     if (raw) {
-      const parsed = JSON.parse(raw);
-      return { ...DEFAULT_SETTINGS, ...parsed };
+      const parsed = JSON.parse(raw) as Partial<UserSettings>;
+
+      return {
+        ...DEFAULT_SETTINGS,
+        ...parsed,
+        regions: Array.isArray(parsed.regions)
+          ? (parsed.regions as RegionId[])
+          : DEFAULT_SETTINGS.regions,
+        voice: parsed.voice === "male" || parsed.voice === "female"
+          ? parsed.voice
+          : DEFAULT_SETTINGS.voice,
+        language: parsed.language === "local" || parsed.language === "en"
+          ? parsed.language
+          : DEFAULT_SETTINGS.language,
+        theme: parsed.theme === "light" || parsed.theme === "dark"
+          ? parsed.theme
+          : DEFAULT_SETTINGS.theme,
+      };
     }
   } catch {}
+
   return DEFAULT_SETTINGS;
 }
 
-export function saveSettings(s: UserSettings) {
+export function saveSettings(next: Partial<UserSettings>) {
   try {
-    localStorage.setItem(SETTINGS_KEY, JSON.stringify(s));
+    if (typeof localStorage === "undefined") return;
+
+    const merged: UserSettings = {
+      ...loadSettings(),
+      ...next,
+    };
+
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify(merged));
+    applyTheme(merged.theme);
   } catch {}
 }
