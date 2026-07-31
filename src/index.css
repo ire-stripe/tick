@@ -40,6 +40,47 @@
     --breaking: 0 84% 60%;
     --stripe: 268 83% 58%;
   }
+
+  :root.light {
+    --background: 42 45% 94%;
+    --foreground: 222 45% 12%;
+
+    --card: 40 55% 98%;
+    --card-foreground: 222 45% 12%;
+
+    --popover: 40 55% 98%;
+    --popover-foreground: 222 45% 12%;
+
+    --primary: 244 82% 62%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 38 35% 88%;
+    --secondary-foreground: 222 45% 12%;
+
+    --muted: 38 28% 88%;
+    --muted-foreground: 220 12% 42%;
+
+    --accent: 244 82% 62%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 74% 52%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 38 24% 78%;
+    --input: 38 24% 78%;
+    --ring: 244 82% 62%;
+
+    --glass-bg: 40 55% 98% / 0.68;
+    --glass-border: 222 30% 20% / 0.12;
+
+    --breaking: 0 74% 52%;
+    --stripe: 252 84% 62%;
+  }
+  
+  :root.light body {
+    background:
+      radial-gradient(circle at 50% 35%, hsl(213 60% 88%) 0%, hsl(42 45% 94%) 48%, hsl(38 45% 91%) 100%);
+  }
 }
 
 canvas {
@@ -50,10 +91,16 @@ canvas {
   * {
     @apply border-border;
   }
+
   html, body {
     @apply bg-background text-foreground;
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
     -webkit-font-smoothing: antialiased;
+  }
+
+  :root.light body {
+    background:
+      radial-gradient(circle at 50% 35%, hsl(213 60% 88%) 0%, hsl(42 45% 94%) 48%, hsl(38 45% 91%) 100%);
   }
 }
 

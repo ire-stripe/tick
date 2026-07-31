@@ -224,22 +224,15 @@ export const RegionPanel = ({ regionId, open, onClose }: Props) => {
 
   return (
     <aside
-      className="fixed z-50 overflow-y-auto"
+      className="fixed z-50 overflow-y-auto bg-card/90 text-card-foreground border border-border backdrop-blur-xl"
       style={{
-          background: "rgba(17, 29, 46, 0.92)",
-          backdropFilter: "blur(20px)",
-          WebkitBackdropFilter: "blur(20px)",
-          border: "1px solid rgba(255,255,255,0.08)",
-          boxShadow: "0 20px 60px rgba(0,0,0,0.5)",
-          pointerEvents: open ? "auto" : "none",
-          ...(isMobile ? mobileStyle : desktopStyle),
-        }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div
-          className="sticky top-0 z-10 flex items-center justify-between px-5 py-4 border-b border-white/5 backdrop-blur-md"
-          style={{ background: "rgba(17,29,46,0.75)" }}
-        >
+        boxShadow: "0 20px 60px rgba(15, 23, 42, 0.24)",
+        pointerEvents: open ? "auto" : "none",
+        ...(isMobile ? mobileStyle : desktopStyle),
+      }}
+      onClick={(e) => e.stopPropagation()}
+    >
+        <div className="sticky top-0 z-10 flex items-center justify-between px-5 py-4 border-b border-border bg-card/85 backdrop-blur-md">
           <div
             className="font-serifDisplay text-2xl leading-none"
             style={{
@@ -251,7 +244,7 @@ export const RegionPanel = ({ regionId, open, onClose }: Props) => {
           </div>
           <button
             onClick={onClose}
-            className="h-8 w-8 rounded-full flex items-center justify-center hover:bg-white/10 transition-colors"
+            className="h-8 w-8 rounded-full flex items-center justify-center hover:bg-foreground/10 transition-colors"
             aria-label="Close"
           >
             <X className="h-4 w-4" />
@@ -300,7 +293,7 @@ export const RegionPanel = ({ regionId, open, onClose }: Props) => {
                       onClick={() =>
                         setVisibleCount((c) => Math.min(c + PAGE_SIZE, MAX_LATEST))
                       }
-                      className="w-full mt-2 py-3 text-[11px] uppercase tracking-[0.2em] text-foreground/80 hover:text-primary bg-white/5 hover:bg-white/10 border border-white/15 hover:border-primary/40 rounded-lg transition-colors"
+                      className="w-full mt-2 py-3 text-[11px] uppercase tracking-[0.2em] text-foreground/80 hover:text-primary bg-secondary/50 hover:bg-secondary border border-border hover:border-primary/40 rounded-lg transition-colors"
                     >
                       Show more ({Math.min(PAGE_SIZE, latest.length - visibleCount)} more)
                     </button>

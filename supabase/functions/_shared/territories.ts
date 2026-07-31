@@ -31,15 +31,24 @@ export type Territory = {
   gnews_countries?: string[];
 };
 
-/** Pan-EMEA feed fanned out to every active territory (see fetch-news). */
+/**
+ * Pan-EMEA feed fanned out to every active territory.
+ *
+ * Keep this narrow. The broad Finextra headline feed creates too much noise.
+ */
 export const PAN_EMEA_RSS_FEEDS: string[] = [
-  "https://www.finextra.com/rss/headlines.aspx",
+  "https://www.finextra.com/rss/channel.aspx?channel=payments",
 ];
 
-/** Global RSS feeds fetched once and AI-classified to the best-matching territory. */
+/**
+ * Global RSS feeds fetched once and AI-classified to the best-matching territory.
+ *
+ * Avoid feeds with paywalls, member-only articles, subscription gates, or lead-capture forms.
+ */
 export const GLOBAL_RSS_FEEDS: string[] = [
   "https://techcrunch.com/category/fintech/feed/",
-  "https://www.theguardian.com/business/fintech/rss",
+  "https://www.eu-startups.com/feed/",
+  "https://tech.eu/feed",
 ];
 
 export const TERRITORIES: Territory[] = [
@@ -51,7 +60,12 @@ export const TERRITORIES: Territory[] = [
     lng: -2.0,
     active: true,
     rss_feeds: [
-      "https://sifted.eu/feed",
+      "https://www.finextra.com/rss/channel.aspx?channel=payments",
+      "https://techcrunch.com/category/fintech/feed/",
+      "https://thefintechtimes.com/feed/",
+      "https://irishtechnews.ie/feed/",
+      "https://www.eu-startups.com/feed/",
+      "https://tech.eu/feed",
     ],
     gnews_countries: ["gb", "ie"],
   },
@@ -62,10 +76,13 @@ export const TERRITORIES: Territory[] = [
     lat: 48.86,
     lng: 2.35,
     active: true,
-    languages: [{ code: "en", label: "EN" }, { code: "fr", label: "FR" }],
+    languages: [
+      { code: "en", label: "EN" },
+      { code: "fr", label: "FR" },
+    ],
     rss_feeds: [
-      "https://sifted.eu/feed",
       "https://tech.eu/feed",
+      "https://www.eu-startups.com/feed/",
     ],
     gnews_countries: ["fr"],
   },
@@ -76,12 +93,17 @@ export const TERRITORIES: Territory[] = [
     lat: 52.52,
     lng: 13.41,
     active: true,
-    languages: [{ code: "en", label: "EN" }, { code: "de", label: "DE" }],
+    languages: [
+      { code: "en", label: "EN" },
+      { code: "de", label: "DE" },
+    ],
     rss_feeds: [
-      "https://sifted.eu/feed",
-      "https://tech.eu/feed",
       "https://financefwd.com/feed/",
-      "https://api.boerse-frankfurt.de/v1/feeds/news.rss",
+      "https://paymentandbanking.com/feed/",
+      "https://www.it-finanzmagazin.de/feed/",
+      "https://www.deutsche-startups.de/feed/",
+      "https://www.fintechnews.ch/feed/",
+      "https://tech.eu/feed",
     ],
     gnews_countries: ["de"],
   },
@@ -93,10 +115,11 @@ export const TERRITORIES: Territory[] = [
     lng: 15.0,
     active: true,
     rss_feeds: [
-      "https://sifted.eu/feed",
-      "https://tech.eu/feed",
       "https://fintechnordics.com/feed/",
-      "http://e24.no/rss2/?seksjon=boers-og-finans",
+      "https://arcticstartup.com/feed/",
+      "https://siliconcanals.com/feed/",
+      "https://tech.eu/feed",
+      "https://www.eu-startups.com/feed/",
     ],
     gnews_countries: ["se", "dk", "no", "fi"],
   },
@@ -108,7 +131,10 @@ export const TERRITORIES: Territory[] = [
     lng: 4.5,
     active: true,
     rss_feeds: [
+      "https://siliconcanals.com/feed/",
       "https://tech.eu/feed",
+      "https://www.eu-startups.com/feed/",
+      "https://www.emerce.nl/feed",
     ],
     gnews_countries: ["nl", "be"],
   },
@@ -125,7 +151,9 @@ export const TERRITORIES: Territory[] = [
       { code: "pt", label: "PT" },
     ],
     rss_feeds: [
-      "https://www.expansion.com/rss/economia.xml",
+      "https://www.eu-startups.com/feed/",
+      "https://tech.eu/feed",
+      "https://elreferente.es/feed/",
     ],
     gnews_countries: ["es", "pt"],
   },
@@ -138,7 +166,10 @@ export const TERRITORIES: Territory[] = [
     active: true,
     rss_feeds: [
       "https://emerging-europe.com/feed/",
+      "https://therecursive.com/feed/",
+      "https://www.eu-startups.com/feed/",
       "https://tech.eu/feed",
+      "https://mamstartup.pl/feed/",
     ],
     gnews_countries: ["pl", "cz", "ro", "hu"],
   },
@@ -149,10 +180,15 @@ export const TERRITORIES: Territory[] = [
     lat: 41.9,
     lng: 12.5,
     active: true,
-    languages: [{ code: "en", label: "EN" }, { code: "it", label: "IT" }],
+    languages: [
+      { code: "en", label: "EN" },
+      { code: "it", label: "IT" },
+    ],
     rss_feeds: [
-      "https://www.ilsole24ore.com/rss/economia.xml",
-      "https://www.repubblica.it/rss/economia/rss2.0.xml",
+      "https://startupitalia.eu/feed/",
+      "https://www.economyup.it/feed/",
+      "https://www.pagamentidigitali.it/feed/",
+      "https://www.eu-startups.com/feed/",
     ],
     gnews_countries: ["it"],
   },
@@ -164,8 +200,10 @@ export const TERRITORIES: Territory[] = [
     lng: 45.0,
     active: true,
     rss_feeds: [
-      "https://fintechnews.media/feed/",
       "https://www.arabnews.com/cat/2/rss.xml",
+      "https://www.wamda.com/feed",
+      "https://www.menabytes.com/feed",
+      "https://fintechnews.media/feed/",
     ],
     gnews_countries: ["ae", "sa", "il"],
   },

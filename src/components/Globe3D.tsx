@@ -74,6 +74,21 @@ export const Globe3D = ({
   const [hoveredTerritory, setHoveredTerritory] = useState<RegionId | null>(null);
   const [tooltipPos, setTooltipPos] = useState<TooltipPos | null>(null);
   const [animFrame, setAnimFrame] = useState(0);
+  const [isLight, setIsLight] = useState(false);
+
+  useEffect(() => {
+    const readTheme = () => setIsLight(document.documentElement.classList.contains("light"));
+    readTheme();
+
+    const observer = new MutationObserver(readTheme);
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["class"],
+    });
+
+    return () => observer.disconnect();
+  }, []);
+
   const resumeTimer = useRef<number | null>(null);
   const momentumRafRef = useRef<number | null>(null);
 
@@ -137,10 +152,13 @@ export const Globe3D = ({
   useLayoutEffect(() => {
     const el = containerRef.current;
     if (!el) return;
+
     const update = () => setSize({ w: el.clientWidth, h: el.clientHeight });
     update();
+
     const ro = new ResizeObserver(update);
     ro.observe(el);
+
     return () => ro.disconnect();
   }, []);
 
@@ -207,7 +225,7 @@ export const Globe3D = ({
     controls.update?.();
   }, [ready, activeRegion]);
 
-  // Fly-to on region change
+  // Fly-to on region change.
   useEffect(() => {
     const g = globeRef.current;
     if (!g) return;
@@ -226,6 +244,7 @@ export const Globe3D = ({
         window.clearTimeout(resumeTimer.current);
         resumeTimer.current = null;
       }
+
       const r = REGIONS[activeRegion];
       controls.autoRotate = false;
 
@@ -257,7 +276,7 @@ export const Globe3D = ({
     }
   }, [activeRegion, ready]);
 
-  // Fade-in once loaded
+  // Fade-in once loaded.
   useEffect(() => {
     if (size.w > 0 && countries.length) {
       const t = window.setTimeout(() => setReady(true), 60);
@@ -302,6 +321,7 @@ export const Globe3D = ({
       const dLng = a.lng - b.lng;
       return dLat * dLat + dLng * dLng;
     };
+
     const seen = new Set<string>();
     const pairs: Array<[string, string]> = [];
 
@@ -370,32 +390,36 @@ export const Globe3D = ({
   }, [activeTooltipRegion, tooltipRegionMeta, size.w, size.h]);
 
   const isFocusedTerritory = (territoryId?: RegionId | null) =>
-  !!territoryId && (territoryId === hoveredTerritory || territoryId === activeRegion);
+    !!territoryId && (territoryId === hoveredTerritory || territoryId === activeRegion);
 
   const getPolygonCapColor = (d: any) => {
     void animFrame; // ensure re-eval on tick
 
     const territoryId = (d as CountryFeature)._territoryId;
 
-    // Selected → gold
+    // Selected → gold.
     if (activeRegion && territoryId === activeRegion) {
       return "rgba(218, 165, 32, 0.35)";
     }
-    // Hovered → blue glow
+
+    // Hovered → Stripe purple glow in light mode, blue glow in dark mode.
     if (territoryId && territoryId === hoveredTerritory) {
-      return "rgba(74, 111, 165, 0.35)";
+      return isLight ? "rgba(88, 28, 255, 0.38)" : "rgba(88, 28, 255, 0.42)";
     }
 
-    // Territory polygon at rest → stronger pulsating fill
+    // Territory polygon at rest → pulsating fill.
     if (territoryId) {
       const territoryIndex = territoryIndexById.get(territoryId) ?? 0;
       const phase = (Date.now() / 3500 + territoryIndex * 0.114) * Math.PI * 2;
-      const opacity = 0.12 + 0.18 * (0.5 + 0.5 * Math.sin(phase));
-      return `rgba(74, 111, 165, ${opacity.toFixed(3)})`;
+      const opacity = isLight
+        ? 0.20 + 0.20 * (0.5 + 0.5 * Math.sin(phase))
+        : 0.22 + 0.22 * (0.5 + 0.5 * Math.sin(phase));
+
+      return `rgba(88, 28, 255, ${opacity.toFixed(3)})`;
     }
 
-    // Non-territory country → darker to increase contrast
-    return "rgba(15, 22, 40, 0.92)";
+    // Non-territory country.
+    return isLight ? "rgba(203, 213, 225, 0.72)" : "rgba(15, 22, 40, 0.92)";
   };
 
   const getPolygonStrokeColor = (d: any) => {
@@ -403,26 +427,29 @@ export const Globe3D = ({
 
     const territoryId = (d as CountryFeature)._territoryId;
 
-    // Non-territory border → much dimmer
+    // Non-territory border.
     if (!territoryId) {
-      return "rgba(30, 45, 70, 0.4)";
+      return isLight ? "rgba(148, 163, 184, 0.38)" : "rgba(30, 45, 70, 0.4)";
     }
 
-    // Selected → gold border
+    // Selected → gold border.
     if (activeRegion && territoryId === activeRegion) {
       return "rgba(218, 165, 32, 0.8)";
     }
-    // Hovered → blue border
+
+    // Hovered → Stripe purple border in light mode, blue border in dark mode.
     if (territoryId && territoryId === hoveredTerritory) {
-      return "rgba(74, 111, 165, 0.9)";
+        return "rgba(88, 28, 255, 0.95)";
     }
 
-    // Territory at rest → stronger pulsating border
+    // Territory at rest → pulsating border.
     const territoryIndex = territoryIndexById.get(territoryId) ?? 0;
     const phase = (Date.now() / 3500 + territoryIndex * 0.114) * Math.PI * 2;
-    const opacity = 0.15 + 0.45 * (0.5 + 0.5 * Math.sin(phase));
+    const opacity = isLight
+      ? 0.42 + 0.34 * (0.5 + 0.5 * Math.sin(phase))
+      : 0.36 + 0.34 * (0.5 + 0.5 * Math.sin(phase));
 
-    return `rgba(74, 111, 165, ${opacity.toFixed(3)})`;
+    return `rgba(88, 28, 255, ${opacity.toFixed(3)})`;
   };
 
   const getPolygonAltitude = (d: any) => {
@@ -437,29 +464,38 @@ export const Globe3D = ({
 
   const polygonClickRef = useRef(false);
 
-  const handlePolygonClick = useCallback((polygon: any | null, event?: { stopPropagation?: () => void }) => {
-    event?.stopPropagation?.();
+  const handlePolygonClick = useCallback(
+    (polygon: any | null, event?: { stopPropagation?: () => void }) => {
+      event?.stopPropagation?.();
 
-    const territoryId = (polygon as CountryFeature | null)?._territoryId ?? null;
-    if (!territoryId) return;
+      const territoryId = (polygon as CountryFeature | null)?._territoryId ?? null;
+      if (!territoryId) return;
 
-    polygonClickRef.current = true;
-    window.setTimeout(() => {
-      polygonClickRef.current = false;
-    }, 0);
+      polygonClickRef.current = true;
+      window.setTimeout(() => {
+        polygonClickRef.current = false;
+      }, 0);
 
-    if (territoryId === activeRegion) {
-      onCloseRegion?.();
-      return;
-    }
+      if (territoryId === activeRegion) {
+        onCloseRegion?.();
+        return;
+      }
 
-    onSelectRef.current?.(territoryId);
-  }, [activeRegion, onCloseRegion]);
+      onSelectRef.current?.(territoryId);
+    },
+    [activeRegion, onCloseRegion],
+  );
 
-  const pressRef = useRef<{ x: number; y: number; t: number; territoryId: RegionId | null } | null>(null);
+  const pressRef = useRef<{
+    x: number;
+    y: number;
+    t: number;
+    territoryId: RegionId | null;
+  } | null>(null);
 
   const handlePointerDown = (e: React.PointerEvent) => {
     if (!activeRegion) return;
+
     pressRef.current = {
       x: e.clientX,
       y: e.clientY,
@@ -504,6 +540,7 @@ export const Globe3D = ({
       if (!g) return;
 
       const pov = g.pointOfView();
+
       g.pointOfView(
         {
           lat: Math.max(-85, Math.min(85, pov.lat + dLat)),
@@ -515,7 +552,7 @@ export const Globe3D = ({
     };
 
     const tick = () => {
-      // decay
+      // Decay.
       vel.lat *= 0.92;
       vel.lng *= 0.92;
 
@@ -537,10 +574,11 @@ export const Globe3D = ({
       e.preventDefault();
       e.stopPropagation();
 
-      // Pinch zoom (ctrlKey=true on trackpad) → adjust altitude manually
+      // Pinch zoom (ctrlKey=true on trackpad) → adjust altitude manually.
       if (e.ctrlKey) {
         const g = globeRef.current;
         if (!g) return;
+
         const pov = g.pointOfView();
         const newAlt = Math.max(0.8, Math.min(3.0, pov.altitude + e.deltaY * 0.005));
         g.pointOfView({ ...pov, altitude: newAlt }, 0);
@@ -606,25 +644,27 @@ export const Globe3D = ({
           backgroundColor="rgba(0,0,0,0)"
           showGlobe
           showAtmosphere
-          atmosphereColor="#4a6fa5"
+          atmosphereColor={isLight ? "#8aa5c4" : "#4a6fa5"}
           atmosphereAltitude={0.18}
           globeMaterial={
             new THREE.MeshPhongMaterial({
-              color: new THREE.Color("#0a1628"),
-              emissive: new THREE.Color("#0a1628"),
-              shininess: 4,
+              color: new THREE.Color(isLight ? "#d7e3ef" : "#0a1628"),
+              emissive: new THREE.Color(isLight ? "#eef4f9" : "#0a1628"),
+              shininess: isLight ? 8 : 4,
             })
           }
           polygonsData={polygonData}
           polygonCapColor={getPolygonCapColor}
-          polygonSideColor={() => "rgba(10, 22, 40, 0.6)"}
+          polygonSideColor={() =>
+            isLight ? "rgba(123, 146, 170, 0.28)" : "rgba(10, 22, 40, 0.6)"
+          }
           polygonStrokeColor={getPolygonStrokeColor}
           polygonAltitude={getPolygonAltitude}
           polygonsTransitionDuration={0}
           onPolygonHover={handlePolygonHover}
           onPolygonClick={handlePolygonClick}
           arcsData={arcs}
-          arcColor={() => "rgba(74, 111, 165, 0.22)"}
+          arcColor={() => "rgba(88, 28, 255, 0.18)"}
           arcStroke={0.4}
           arcAltitudeAutoScale={0.5}
           arcDashLength={0.15}

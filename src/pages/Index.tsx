@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { Settings as SettingsIcon } from "lucide-react";
+import { Moon, Settings as SettingsIcon, Sun } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Globe3D } from "@/components/Globe3D";
 import { StarField } from "@/components/StarField";
@@ -9,7 +9,7 @@ import { RegionPanel } from "@/components/RegionPanel";
 import { MiniPlayer } from "@/components/MiniPlayer";
 import { useAudioPlayer } from "@/contexts/AudioPlayerContext";
 import { REGION_IDS, RegionId } from "@/lib/regions";
-import { loadSettings } from "@/lib/userSettings";
+import { loadSettings, saveSettings, applyTheme } from "@/lib/userSettings";
 
 
 const Index = () => {
@@ -23,14 +23,33 @@ const Index = () => {
   const [burstKey, setBurstKey] = useState(0);
   const [hasSelected, setHasSelected] = useState(false);
   const [enabledRegions, setEnabledRegions] = useState<string[]>(() => loadSettings().regions);
+  const [theme, setTheme] = useState(() => loadSettings().theme);
   const { episode: activeEpisode } = useAudioPlayer();
 
-  // Reload whenever the page regains focus (e.g. returning from /settings).
   useEffect(() => {
-    const refresh = () => setEnabledRegions(loadSettings().regions);
+    const settings = loadSettings();
+    setTheme(settings.theme);
+    applyTheme(settings.theme);
+
+    const refresh = () => {
+      const nextSettings = loadSettings();
+      setEnabledRegions(nextSettings.regions);
+      setTheme(nextSettings.theme);
+      applyTheme(nextSettings.theme);
+    };
+
     window.addEventListener("focus", refresh);
     return () => window.removeEventListener("focus", refresh);
   }, []);
+
+  const toggleTheme = () => {
+    const nextTheme = theme === "dark" ? "light" : "dark";
+    const settings = loadSettings();
+
+    saveSettings({ ...settings, theme: nextTheme });
+    setTheme(nextTheme);
+    applyTheme(nextTheme);
+  };
 
 
   // Trigger a shimmer burst on the star field when a region is opened or switched.
@@ -155,16 +174,33 @@ const Index = () => {
   };
 
   return (
-    <div className="h-screen flex flex-col overflow-hidden relative">
+    <div className="h-screen flex flex-col overflow-hidden relative bg-background text-foreground">
       <StarField burstKey={burstKey} />
-      <Link
-        to="/settings"
-        aria-label="Settings"
-        className="fixed z-[60] h-9 w-9 rounded-full flex items-center justify-center hover:bg-white/10 text-muted-foreground hover:text-primary transition-colors"
-        style={{ top: 16, right: 20 }}
-      >
-        <SettingsIcon className="h-5 w-5" />
-      </Link>
+        <div
+          className="fixed z-[60] flex items-center gap-2"
+          style={{ top: 16, right: 20 }}
+        >
+          <button
+            type="button"
+            onClick={toggleTheme}
+            aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+            className="h-9 w-9 rounded-full flex items-center justify-center hover:bg-foreground/10 text-muted-foreground hover:text-primary transition-colors"
+          >
+            {theme === "dark" ? (
+              <Sun className="h-5 w-5" />
+            ) : (
+              <Moon className="h-5 w-5" />
+            )}
+          </button>
+
+          <Link
+            to="/settings"
+            aria-label="Settings"
+            className="h-9 w-9 rounded-full flex items-center justify-center hover:bg-foreground/10 text-muted-foreground hover:text-primary transition-colors"
+          >
+            <SettingsIcon className="h-5 w-5" />
+          </Link>
+        </div>
 
       <header className="pt-4 pb-2 text-center shrink-0 relative z-10">
         <h1 className="font-serifDisplay text-4xl md:text-5xl leading-none lowercase">

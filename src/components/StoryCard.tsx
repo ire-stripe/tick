@@ -59,7 +59,7 @@ export const StoryCard = ({
 
   return (
     <article
-      className={`glass rounded-xl p-5 transition-all duration-200 hover:border-white/20 ${
+      className={`glass rounded-xl p-5 transition-all duration-200 hover:border-foreground/20 ${
         stripeAccent ? "border-l-4 !border-l-[hsl(var(--stripe))]" : ""
       }`}
     >
@@ -139,7 +139,7 @@ export const StoryCard = ({
             size="sm"
             variant="outline"
             asChild
-            className="h-8 text-xs border-white/15 bg-transparent hover:bg-white/5"
+            className="h-8 text-xs border-border bg-transparent hover:bg-secondary"
           >
             <a href={story.url} target="_blank" rel="noreferrer">↗ Read</a>
           </Button>
