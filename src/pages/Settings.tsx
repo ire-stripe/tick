@@ -8,10 +8,8 @@ import { toast } from "sonner";
 import {
   loadSettings,
   saveSettings,
-  applyTheme,
   VoicePref,
   LanguagePref,
-  ThemePref,
 } from "@/lib/userSettings";
 
 const Settings = () => {
@@ -20,15 +18,20 @@ const Settings = () => {
   const [slack, setSlack] = useState<boolean>(initial.slack);
   const [voice, setVoice] = useState<VoicePref>(initial.voice);
   const [language, setLanguage] = useState<LanguagePref>(initial.language);
-  const [theme, setTheme] = useState<ThemePref>(initial.theme);
 
   const toggle = (id: RegionId) => {
     setRegions((r) => (r.includes(id) ? r.filter((x) => x !== id) : [...r, id]));
   };
 
   const save = () => {
-    saveSettings({ regions, slack, voice, language, theme });
-    applyTheme(theme);
+    saveSettings({
+      ...loadSettings(),
+      regions,
+      slack,
+      voice,
+      language,
+    });
+
     toast.success("Preferences saved");
   };
 
@@ -98,34 +101,7 @@ const Settings = () => {
           </div>
         </section>
 
-        <section className="glass rounded-2xl p-6">
-          <h2 className="text-lg font-semibold mb-1">Appearance</h2>
-          <p className="text-sm text-muted-foreground mb-4">
-            Choose how tick looks on this device.
-          </p>
-          <div className="flex gap-2">
-            <button
-              type="button"
-              className={pillClass(theme === "dark")}
-              onClick={() => {
-                setTheme("dark");
-                applyTheme("dark");
-              }}
-            >
-              Dark
-            </button>
-            <button
-              type="button"
-              className={pillClass(theme === "light")}
-              onClick={() => {
-                setTheme("light");
-                applyTheme("light");
-              }}
-            >
-              Light
-            </button>
-          </div>
-        </section>
+
 
         <section className="glass rounded-2xl p-6 opacity-60">
           <div className="flex items-start justify-between gap-4">
