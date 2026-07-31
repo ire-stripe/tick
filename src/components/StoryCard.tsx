@@ -21,10 +21,13 @@ export interface Story {
 function relTime(iso: string) {
   const diff = Date.now() - new Date(iso).getTime();
   if (diff < 60000) return "just now";
+
   const m = Math.floor(diff / 60000);
   if (m < 60) return `${m} min ago`;
+
   const h = Math.floor(m / 60);
   if (h < 24) return `${h} hr ago`;
+
   return `${Math.floor(h / 24)} d ago`;
 }
 
@@ -63,28 +66,32 @@ export const StoryCard = ({
         stripeAccent ? "border-l-4 !border-l-[hsl(var(--stripe))]" : ""
       }`}
     >
-      <div className="flex items-start gap-2 mb-2">
+      <div className="mb-2 flex items-start gap-2">
         {story.is_breaking && (
-          <span className="shrink-0 mt-0.5 inline-flex items-center gap-1 rounded-md bg-destructive/20 border border-destructive/40 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-destructive">
-            <span className="h-1.5 w-1.5 rounded-full bg-destructive animate-pulse" />
+          <span className="mt-0.5 inline-flex shrink-0 items-center gap-1 rounded-md border border-destructive/40 bg-destructive/20 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-destructive">
+            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-destructive" />
             Hot
           </span>
         )}
+
         <h3 className="font-serifDisplay text-lg leading-snug text-foreground">
           {story.title}
         </h3>
       </div>
+
       {story.summary && (
-        <p className="text-sm text-muted-foreground mb-3 line-clamp-2">{story.summary}</p>
+        <p className="mb-3 line-clamp-2 text-sm text-muted-foreground">
+          {story.summary}
+        </p>
       )}
 
       {hasStripePlay && (
-        <div className="mb-3 rounded-lg border border-[rgba(218,165,32,0.22)] bg-zinc-950/35 px-3 py-2.5">
-          <div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-[rgba(218,165,32,0.95)]">
+        <div className="mb-3 rounded-lg border border-primary/25 bg-primary/5 px-3 py-2.5 dark:border-[rgba(218,165,32,0.22)] dark:bg-zinc-950/35">
+          <div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-primary dark:text-[rgba(218,165,32,0.95)]">
             ⚡ Stripe Play
           </div>
 
-          <p className="text-xs leading-relaxed text-zinc-100/90">
+          <p className="text-xs leading-relaxed text-foreground/85 dark:text-zinc-100/90">
             {story.stripe_play}
           </p>
 
@@ -93,7 +100,7 @@ export const StoryCard = ({
               {stripeProducts.map((product) => (
                 <span
                   key={product}
-                  className="rounded-full border border-white/10 bg-zinc-900/80 px-2 py-0.5 text-[10px] font-medium text-zinc-300"
+                  className="rounded-full border border-primary/20 bg-background/70 px-2 py-0.5 text-[10px] font-medium text-foreground/75 dark:border-white/10 dark:bg-zinc-900/80 dark:text-zinc-300"
                 >
                   {product}
                 </span>
@@ -102,13 +109,13 @@ export const StoryCard = ({
           )}
 
           {proofPoint && (
-            <p className="mt-2 border-l border-[rgba(218,165,32,0.35)] pl-2 text-[11px] leading-relaxed text-zinc-400">
+            <p className="mt-2 border-l border-primary/30 pl-2 text-[11px] leading-relaxed text-muted-foreground dark:border-[rgba(218,165,32,0.35)] dark:text-zinc-400">
               {proofPointUrl ? (
                 <a
                   href={proofPointUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="underline-offset-2 transition-colors hover:text-zinc-300 hover:underline"
+                  className="underline-offset-2 transition-colors hover:text-foreground hover:underline dark:hover:text-zinc-300"
                 >
                   📊 “{proofPoint}”
                 </a>
@@ -124,6 +131,7 @@ export const StoryCard = ({
         <span className="text-xs text-muted-foreground">
           {story.source} · {relTime(story.published_at)}
         </span>
+
         <div className="flex gap-2">
           {showListen && canListen && (
             <Button
@@ -135,17 +143,19 @@ export const StoryCard = ({
               {playing ? "⏸ Pause" : "▶ Listen"}
             </Button>
           )}
+
           <Button
             size="sm"
             variant="outline"
             asChild
-            className="h-8 text-xs border-border bg-transparent hover:bg-secondary"
+            className="h-8 border-border bg-transparent text-xs hover:bg-secondary"
           >
-            <a href={story.url} target="_blank" rel="noreferrer">↗ Read</a>
+            <a href={story.url} target="_blank" rel="noreferrer">
+              ↗ Read
+            </a>
           </Button>
         </div>
       </div>
     </article>
   );
 };
-
