@@ -18,6 +18,8 @@ const Settings = () => {
   const [slack, setSlack] = useState<boolean>(initial.slack);
   const [voice, setVoice] = useState<VoicePref>(initial.voice);
   const [language, setLanguage] = useState<LanguagePref>(initial.language);
+  const [defaultRegion, setDefaultRegion] = useState<RegionId | "none">(initial.defaultRegion);
+  const [autoOpenDefaultRegion, setAutoOpenDefaultRegion] = useState<boolean>(initial.autoOpenDefaultRegion);
 
   const toggle = (id: RegionId) => {
     setRegions((r) => (r.includes(id) ? r.filter((x) => x !== id) : [...r, id]));
@@ -29,6 +31,8 @@ const Settings = () => {
       slack,
       voice,
       language,
+      defaultRegion,
+      autoOpenDefaultRegion: defaultRegion !== "none" && autoOpenDefaultRegion,
     });
 
     toast.success("Preferences saved");
@@ -70,6 +74,54 @@ const Settings = () => {
                 </span>
               </label>
             ))}
+          </div>
+        </section>
+
+        <section className="glass rounded-2xl p-6">
+          <h2 className="text-lg font-semibold mb-1">Default view on open</h2>
+          <p className="text-sm text-muted-foreground mb-4">
+            Choose a region to open automatically when you launch tick.
+          </p>
+
+          <div className="space-y-4">
+            <label className="block">
+              <span className="text-xs uppercase tracking-[0.14em] text-muted-foreground">
+                Default region
+              </span>
+              <select
+                value={defaultRegion}
+                onChange={(e) => setDefaultRegion(e.target.value as RegionId | "none")}
+                className="mt-2 w-full rounded-xl border border-border bg-background/70 px-3 py-2 text-sm text-foreground outline-none transition-colors focus:border-primary"
+              >
+                <option value="none">Globe / no auto-open</option>
+                {REGION_IDS.map((id) => (
+                  <option key={id} value={id}>
+                    {REGIONS[id].name} {REGIONS[id].flags}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <div className="text-sm font-medium">Automatically expand this region</div>
+                <p className="text-sm text-muted-foreground">
+                  When enabled, tick. opens directly into your selected region.
+                </p>
+              </div>
+
+              <Switch
+                checked={autoOpenDefaultRegion}
+                onCheckedChange={setAutoOpenDefaultRegion}
+                disabled={defaultRegion === "none"}
+              />
+            </div>
+
+            {defaultRegion !== "none" && !regions.includes(defaultRegion) && (
+              <p className="text-xs text-amber-500 dark:text-amber-300/90">
+                This region is currently hidden from your globe. Re-enable it above or choose another default.
+              </p>
+            )}
           </div>
         </section>
 

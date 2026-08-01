@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { Moon, Settings as SettingsIcon, Sun } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
@@ -24,6 +24,8 @@ const Index = () => {
   const [hasSelected, setHasSelected] = useState(false);
   const [enabledRegions, setEnabledRegions] = useState<string[]>(() => loadSettings().regions);
   const [theme, setTheme] = useState(() => loadSettings().theme);
+  const [showOnboardingHint, setShowOnboardingHint] = useState(() => !loadSettings().onboardingHintDismissed);
+  const autoOpenAppliedRef = useRef(false);
   const { episode: activeEpisode } = useAudioPlayer();
 
   useEffect(() => {
@@ -44,12 +46,42 @@ const Index = () => {
 
   const toggleTheme = () => {
     const nextTheme = theme === "dark" ? "light" : "dark";
-    const settings = loadSettings();
 
-    saveSettings({ ...settings, theme: nextTheme });
+    saveSettings({ theme: nextTheme });
     setTheme(nextTheme);
     applyTheme(nextTheme);
   };
+
+  // If the user has chosen a default region, open it once when tick. launches.
+  useEffect(() => {
+    if (autoOpenAppliedRef.current) return;
+
+    const settings = loadSettings();
+    const shouldAutoOpen =
+      settings.autoOpenDefaultRegion &&
+      settings.defaultRegion !== "none" &&
+      settings.regions.includes(settings.defaultRegion) &&
+      REGION_IDS.includes(settings.defaultRegion);
+
+    if (!shouldAutoOpen) return;
+
+    autoOpenAppliedRef.current = true;
+    const timer = window.setTimeout(() => {
+      if (settings.defaultRegion === "none") return;
+
+      setActiveRegion(settings.defaultRegion);
+      setPanelRegion(settings.defaultRegion);
+      setPanelOpen(true);
+      setHasSelected(true);
+
+      if (!settings.onboardingHintDismissed) {
+        setShowOnboardingHint(false);
+        saveSettings({ onboardingHintDismissed: true });
+      }
+    }, 450);
+
+    return () => window.clearTimeout(timer);
+  }, []);
 
 
   // Trigger a shimmer burst on the star field when a region is opened or switched.
@@ -159,11 +191,23 @@ const Index = () => {
 
   const minsAgo = Math.max(1, Math.floor((Date.now() - refreshedAt.getTime()) / 60000));
 
-  const handleSelectRegion = (id: RegionId) => {
+  const dismissOnboardingHint = () => {
+    if (!showOnboardingHint) return;
+
+    setShowOnboardingHint(false);
+    saveSettings({ onboardingHintDismissed: true });
+  };
+
+  const openRegion = (id: RegionId) => {
     setActiveRegion(id);
     setPanelRegion(id);
     setPanelOpen(true);
     setHasSelected(true);
+    dismissOnboardingHint();
+  };
+
+  const handleSelectRegion = (id: RegionId) => {
+    openRegion(id);
   };
 
   const handleClose = () => {
@@ -229,6 +273,21 @@ const Index = () => {
           ambientHeadlines={ambient}
           enabledRegions={enabledRegions}
         />
+
+        {showOnboardingHint && !hasSelected && !activeRegion && (
+          <div className="pointer-events-auto absolute bottom-6 left-1/2 z-20 w-[min(92vw,380px)] -translate-x-1/2 rounded-2xl border border-border bg-background/75 px-4 py-3 text-center shadow-2xl backdrop-blur-md dark:border-white/10">
+            <p className="text-sm font-medium text-foreground">
+              Click a glowing region to explore today’s market signals.
+            </p>
+            <button
+              type="button"
+              onClick={dismissOnboardingHint}
+              className="mt-3 text-xs font-semibold uppercase tracking-[0.14em] text-primary transition-colors hover:text-primary/80"
+            >
+              Got it
+            </button>
+          </div>
+        )}
       </main>
 
       <div className="shrink-0 relative z-10">

@@ -12,6 +12,9 @@ export type UserSettings = {
   voice: VoicePref;
   language: LanguagePref;
   theme: ThemePref;
+  defaultRegion: RegionId | "none";
+  autoOpenDefaultRegion: boolean;
+  onboardingHintDismissed: boolean;
 };
 
 export const DEFAULT_SETTINGS: UserSettings = {
@@ -20,6 +23,9 @@ export const DEFAULT_SETTINGS: UserSettings = {
   voice: "female",
   language: "en",
   theme: "dark",
+  defaultRegion: "none",
+  autoOpenDefaultRegion: false,
+  onboardingHintDismissed: false,
 };
 
 export function applyTheme(theme: ThemePref) {
@@ -58,6 +64,15 @@ export function loadSettings(): UserSettings {
         theme: parsed.theme === "light" || parsed.theme === "dark"
           ? parsed.theme
           : DEFAULT_SETTINGS.theme,
+        defaultRegion: parsed.defaultRegion === "none" || REGION_IDS.includes(parsed.defaultRegion as RegionId)
+          ? (parsed.defaultRegion as RegionId | "none")
+          : DEFAULT_SETTINGS.defaultRegion,
+        autoOpenDefaultRegion: typeof parsed.autoOpenDefaultRegion === "boolean"
+          ? parsed.autoOpenDefaultRegion
+          : DEFAULT_SETTINGS.autoOpenDefaultRegion,
+        onboardingHintDismissed: typeof parsed.onboardingHintDismissed === "boolean"
+          ? parsed.onboardingHintDismissed
+          : DEFAULT_SETTINGS.onboardingHintDismissed,
       };
     }
   } catch {}
