@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { Moon, Settings as SettingsIcon, Sun } from "lucide-react";
+import { Clipboard, Moon, Settings as SettingsIcon, Sun } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Globe3D } from "@/components/Globe3D";
 import { StarField } from "@/components/StarField";
@@ -10,55 +10,113 @@ import { MiniPlayer } from "@/components/MiniPlayer";
 import { useAudioPlayer } from "@/contexts/AudioPlayerContext";
 import { REGIONS, REGION_IDS, RegionId } from "@/lib/regions";
 import { loadSettings, saveSettings, applyTheme } from "@/lib/userSettings";
+import { toast } from "sonner";
 
-type TodaySignal = {
-  region: RegionId;
+type MarketSignal = {
+  id: string;
   title: string;
-  count: number;
+  whyItMatters: string;
+  bestFitAccounts: string[];
+  evidenceLabel: string;
+  primaryRegion: RegionId | null;
 };
 
-type StripePlay = {
-  product: string;
-  reason: string;
-  count: number;
-  region: RegionId | null;
+type ProspectingHook = {
+  id: string;
+  title: string;
+  bestFor: string[];
+  angle: string;
+  stripeContext: string[];
+  suggestedAngle: string;
+  marketSignal: string;
+  evidenceLabel: string;
+  primaryRegion: RegionId | null;
 };
 
-const STRIPE_PLAY_DEFINITIONS = [
+type ProspectingTemplate = {
+  id: string;
+  signalTitle: string;
+  hookTitle: string;
+  whyItMatters: string;
+  bestFitAccounts: string[];
+  angle: string;
+  suggestedAngle: string;
+  stripeContext: string[];
+  keywords: string[];
+};
+
+const PROSPECTING_TEMPLATES: ProspectingTemplate[] = [
   {
-    product: "Billing",
-    reason: "Subscription, recurring revenue, and monetization signals",
-    keywords: ["subscription", "billing", "invoice", "recurring", "churn", "monetization", "revenue recovery"],
+    id: "ai-monetization",
+    signalTitle: "AI monetization is getting more complex",
+    hookTitle: "AI monetization hook",
+    whyItMatters:
+      "Fast-growing AI companies often need pricing, billing, and payment infrastructure that can keep up with usage growth.",
+    bestFitAccounts: ["AI tools", "devtools", "B2B SaaS", "usage-based software"],
+    angle: "Ask how they are managing pricing, payments, and billing complexity as usage grows.",
+    suggestedAngle: "usage-based monetization and billing complexity",
+    stripeContext: ["Billing", "Payments", "Link"],
+    keywords: ["ai", "artificial intelligence", "openai", "llm", "automation", "developer", "devtool", "machine learning"],
   },
   {
-    product: "Connect",
-    reason: "Marketplace, platform, onboarding, and embedded finance signals",
-    keywords: ["marketplace", "platform", "seller", "merchant onboarding", "embedded finance", "payout"],
+    id: "platform-monetization",
+    signalTitle: "Platforms are turning payments into a product surface",
+    hookTitle: "Platform monetization hook",
+    whyItMatters:
+      "Platforms and marketplaces are looking for ways to deepen merchant relationships through onboarding, payouts, and embedded financial workflows.",
+    bestFitAccounts: ["Marketplaces", "vertical SaaS", "merchant networks", "fintech platforms"],
+    angle: "Ask whether payments are becoming part of the product experience, not just back-office infrastructure.",
+    suggestedAngle: "platform monetization and embedded financial workflows",
+    stripeContext: ["Connect", "Billing", "Tax"],
+    keywords: ["marketplace", "platform", "seller", "merchant", "embedded finance", "payout", "onboarding"],
   },
   {
-    product: "Payments",
-    reason: "Checkout, commerce, wallets, and payment performance signals",
-    keywords: ["payment", "payments", "checkout", "commerce", "wallet", "transaction", "conversion"],
+    id: "checkout-conversion",
+    signalTitle: "Payment choice is becoming a conversion lever",
+    hookTitle: "Checkout conversion hook",
+    whyItMatters:
+      "Consumer businesses expanding across markets may need local payment methods, wallet support, and lower-friction checkout.",
+    bestFitAccounts: ["Ecommerce", "travel", "consumer marketplaces", "subscription commerce"],
+    angle: "Ask how payment choice is affecting conversion as they grow across markets.",
+    suggestedAngle: "checkout conversion and local payment preferences",
+    stripeContext: ["Payments", "Link", "Local payment methods"],
+    keywords: ["checkout", "wallet", "consumer", "conversion", "ecommerce", "retail", "pay by bank", "payment choice"],
   },
   {
-    product: "Radar",
-    reason: "Fraud, risk, scams, and chargeback signals",
-    keywords: ["fraud", "scam", "risk", "chargeback", "security"],
+    id: "risk-reduction",
+    signalTitle: "Fraud pressure is creating a conversion tradeoff",
+    hookTitle: "Risk reduction hook",
+    whyItMatters:
+      "High-volume businesses need to reduce fraud and disputes without adding unnecessary friction to good customers.",
+    bestFitAccounts: ["High-volume commerce", "fintech", "marketplaces", "ticketing"],
+    angle: "Ask whether fraud controls are protecting revenue without hurting legitimate conversion.",
+    suggestedAngle: "fraud reduction without conversion loss",
+    stripeContext: ["Radar", "optimized authorization", "Identity"],
+    keywords: ["fraud", "scam", "risk", "chargeback", "dispute", "security", "identity"],
   },
   {
-    product: "Link",
-    reason: "Consumer checkout, wallet, and conversion signals",
-    keywords: ["wallet", "checkout", "conversion", "consumer", "pay by bank", "bank account"],
+    id: "global-expansion",
+    signalTitle: "Expansion is making payments more operationally complex",
+    hookTitle: "Market expansion hook",
+    whyItMatters:
+      "Companies entering new markets often run into currency, tax, local payment, and compliance complexity at the same time.",
+    bestFitAccounts: ["SaaS", "marketplaces", "cross-border commerce", "international platforms"],
+    angle: "Ask how they are managing payment complexity as they enter or serve more markets.",
+    suggestedAngle: "international expansion and payment operations",
+    stripeContext: ["Payments", "Tax", "Local payment methods"],
+    keywords: ["cross-border", "international", "global", "expansion", "currency", "vat", "tax", "compliance", "local"],
   },
   {
-    product: "Tax",
-    reason: "Tax, VAT, compliance, and cross-border expansion signals",
-    keywords: ["tax", "vat", "gst", "compliance", "cross-border", "international"],
-  },
-  {
-    product: "Capital / Issuing",
-    reason: "Financing, card issuing, spend management, and credit signals",
-    keywords: ["capital", "lending", "financing", "issuing", "card issuing", "expense", "credit"],
+    id: "capital-access",
+    signalTitle: "Financial services are becoming part of the user experience",
+    hookTitle: "Embedded finance hook",
+    whyItMatters:
+      "Businesses with merchant or creator networks can use financing, cards, and money movement to create stickier customer relationships.",
+    bestFitAccounts: ["Platforms", "creator tools", "merchant networks", "vertical SaaS"],
+    angle: "Ask whether financial services could help them deepen the relationship with their users or sellers.",
+    suggestedAngle: "embedded financial services and merchant retention",
+    stripeContext: ["Capital", "Issuing", "Connect"],
+    keywords: ["capital", "lending", "financing", "issuing", "card issuing", "credit", "expense", "spend management"],
   },
 ];
 
@@ -66,8 +124,9 @@ const Index = () => {
   const [counts, setCounts] = useState<Record<string, number>>({});
   const [headlines, setHeadlines] = useState<any[]>([]);
   const [ambient, setAmbient] = useState<{ title: string; region: RegionId }[]>([]);
-  const [todaySignals, setTodaySignals] = useState<TodaySignal[]>([]);
-  const [stripePlays, setStripePlays] = useState<StripePlay[]>([]);
+  const [marketSignals, setMarketSignals] = useState<MarketSignal[]>([]);
+  const [prospectingHooks, setProspectingHooks] = useState<ProspectingHook[]>([]);
+  const [panelScopeLabel, setPanelScopeLabel] = useState("your regions");
   const [refreshedAt, setRefreshedAt] = useState<Date>(new Date());
   const [activeRegion, setActiveRegion] = useState<RegionId | null>(null);
   const [panelRegion, setPanelRegion] = useState<RegionId | null>(null);
@@ -234,43 +293,38 @@ const Index = () => {
       });
       setAmbient(ambientOut);
 
-      const enabledRegionSet = new Set(loadSettings().regions);
-      const signalOut = REGION_IDS.map((region) => {
-        if (!enabledRegionSet.has(region)) return null;
+      const settingsForPanels = loadSettings();
+      const enabledRegionSet = new Set(settingsForPanels.regions);
+      const defaultRegion = settingsForPanels.defaultRegion !== "none" ? settingsForPanels.defaultRegion : null;
+      const primaryScope =
+        defaultRegion && enabledRegionSet.has(defaultRegion) && REGION_IDS.includes(defaultRegion)
+          ? [defaultRegion]
+          : [];
+      const fallbackScope = settingsForPanels.regions.filter((region) => REGION_IDS.includes(region));
+      const scopedRegions = primaryScope.length > 0 ? primaryScope : fallbackScope.length > 0 ? fallbackScope : REGION_IDS;
+      const scopedRegionSet = new Set(scopedRegions);
+      const scopeLabel =
+        primaryScope.length === 1
+          ? REGIONS[primaryScope[0]]?.name ?? primaryScope[0]
+          : "your regions";
+      setPanelScopeLabel(scopeLabel);
 
-        const list = byRegion[region] ?? [];
-        const today = dedupeByTitle(
-          list.filter((a: any) => !a.is_in_brief && a.published_at >= todayIso),
-        );
-        const fallback = dedupeByTitle(list);
-        const candidate = today[0] ?? fallback[0];
-
-        if (!candidate || !c[region]) return null;
-
-        return {
-          region: region as RegionId,
-          title: candidate.title,
-          count: c[region],
-        };
-      })
-        .filter(Boolean)
-        .sort((a: any, b: any) => b.count - a.count)
-        .slice(0, 3) as TodaySignal[];
-
-      setTodaySignals(signalOut);
-
-      const recentArticles = dedupeByTitle(
+      const scopedRecentArticles = dedupeByTitle(
         articles.filter((a: any) => {
           if (!REGION_IDS.includes(a.region)) return false;
-          if (!enabledRegionSet.has(a.region)) return false;
+          if (!scopedRegionSet.has(a.region)) return false;
           return now - new Date(a.published_at).getTime() <= H72;
         }),
       );
+      const scopedFallbackArticles = dedupeByTitle(
+        articles.filter((a: any) => REGION_IDS.includes(a.region) && scopedRegionSet.has(a.region)),
+      );
+      const scopedArticles = scopedRecentArticles.length > 0 ? scopedRecentArticles : scopedFallbackArticles;
 
-      const playOut = STRIPE_PLAY_DEFINITIONS.map((definition) => {
-        const matches = recentArticles.filter((a: any) => {
+      const templateMatches = PROSPECTING_TEMPLATES.map((template) => {
+        const matches = scopedArticles.filter((a: any) => {
           const haystack = `${a.title ?? ""} ${a.url ?? ""}`.toLowerCase();
-          return definition.keywords.some((keyword) => haystack.includes(keyword));
+          return template.keywords.some((keyword) => haystack.includes(keyword));
         });
 
         const regionCounts = new Map<RegionId, number>();
@@ -279,20 +333,43 @@ const Index = () => {
           regionCounts.set(region, (regionCounts.get(region) ?? 0) + 1);
         });
 
-        const topRegion = [...regionCounts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
+        const primaryRegion = [...regionCounts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? scopedRegions[0] ?? null;
 
         return {
-          product: definition.product,
-          reason: definition.reason,
-          count: matches.length,
-          region: topRegion,
+          template,
+          matches,
+          primaryRegion,
+          score: matches.length,
         };
       })
-        .filter((play) => play.count > 0)
-        .sort((a, b) => b.count - a.count)
+        .filter((item) => item.score > 0)
+        .sort((a, b) => b.score - a.score)
         .slice(0, 3);
 
-      setStripePlays(playOut);
+      const signalOut = templateMatches.map(({ template, matches, primaryRegion }) => ({
+        id: template.id,
+        title: template.signalTitle,
+        whyItMatters: template.whyItMatters,
+        bestFitAccounts: template.bestFitAccounts,
+        evidenceLabel: `${matches.length} ${scopeLabel} ${matches.length === 1 ? "story" : "stories"}`,
+        primaryRegion,
+      }));
+
+      setMarketSignals(signalOut);
+
+      const hookOut = templateMatches.map(({ template, matches, primaryRegion }) => ({
+        id: template.id,
+        title: template.hookTitle,
+        bestFor: template.bestFitAccounts,
+        angle: template.angle,
+        stripeContext: template.stripeContext,
+        suggestedAngle: template.suggestedAngle,
+        marketSignal: template.signalTitle,
+        evidenceLabel: `Based on ${matches.length} ${scopeLabel} ${matches.length === 1 ? "signal" : "signals"}`,
+        primaryRegion,
+      }));
+
+      setProspectingHooks(hookOut);
 
       setRefreshedAt(new Date());
     };
@@ -335,6 +412,20 @@ const Index = () => {
     setPanelOpen(false);
     window.setTimeout(() => setActiveRegion(null), 100);
     window.setTimeout(() => setPanelRegion(null), 350);
+  };
+
+  const copyKaiPrompt = async (hook: ProspectingHook) => {
+    const regionLine = hook.primaryRegion
+      ? REGIONS[hook.primaryRegion]?.name ?? hook.primaryRegion
+      : panelScopeLabel;
+    const prompt = `Use #prospecting-email-writer to write a cold outbound email.\n\nCompany: [paste company name or Salesforce account URL]\n\nContext from tick.:\n- Region: ${regionLine}\n- Market signal: ${hook.marketSignal}\n- Suggested angle: ${hook.suggestedAngle}\n- Best-fit accounts: ${hook.bestFor.join(", ")}\n- Stripe context for internal reasoning: ${hook.stripeContext.join(", ")}\n\nStill research the company and choose the single best Stripe angle. Do not assume the account has these pains unless supported by research. Keep the output in the #prospecting-email-writer format.`;
+
+    try {
+      await navigator.clipboard.writeText(prompt);
+      toast.success("Kai prompt copied");
+    } catch {
+      toast.error("Could not copy prompt");
+    }
   };
 
   return (
@@ -404,40 +495,48 @@ const Index = () => {
       </header>
 
       <main className="flex-1 min-h-0 flex items-center justify-center px-4 relative z-10">
-        {!panelOpen && todaySignals.length > 0 && (
-          <aside className="pointer-events-auto absolute left-6 top-1/2 z-20 hidden w-64 -translate-y-1/2 xl:block">
+        {!panelOpen && marketSignals.length > 0 && (
+          <aside className="pointer-events-auto absolute left-6 top-1/2 z-20 hidden w-72 -translate-y-1/2 xl:block">
             <div className="rounded-3xl border border-border bg-background/60 p-4 shadow-2xl backdrop-blur-md dark:border-white/10">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                Today’s Signals
-              </p>
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                    {panelScopeLabel === "your regions" ? "Your Signals" : `${panelScopeLabel} Signals`}
+                  </p>
+                  <p className="mt-1 text-[10px] text-muted-foreground/80">
+                    Market shifts worth using in outreach.
+                  </p>
+                </div>
+                <span className="rounded-full bg-primary/10 px-2 py-1 text-[9px] font-semibold uppercase tracking-[0.12em] text-primary">
+                  Scoped
+                </span>
+              </div>
 
               <div className="mt-4 space-y-3">
-                {todaySignals.map((signal) => (
+                {marketSignals.map((signal) => (
                   <button
-                    key={signal.region}
+                    key={signal.id}
                     type="button"
-                    onClick={() => handleSelectRegion(signal.region)}
+                    onClick={() => signal.primaryRegion && handleSelectRegion(signal.primaryRegion)}
                     className="group w-full rounded-2xl border border-border/80 bg-background/45 p-3 text-left transition-colors hover:border-primary/60 hover:bg-secondary/60 dark:border-white/10 dark:hover:border-primary/60"
                   >
-                    <div className="flex items-center justify-between gap-3">
-                      <span className="text-xs font-semibold text-foreground">
-                        {REGIONS[signal.region]?.name ?? signal.region}
-                      </span>
-                      <span className="rounded-full bg-primary/12 px-2 py-0.5 text-[10px] font-semibold text-primary">
-                        {signal.count} {signal.count === 1 ? "story" : "stories"}
-                      </span>
-                    </div>
-                    <p
-                      className="mt-2 text-xs leading-5 text-muted-foreground group-hover:text-foreground/85"
-                      style={{
-                        display: "-webkit-box",
-                        WebkitLineClamp: 2,
-                        WebkitBoxOrient: "vertical",
-                        overflow: "hidden",
-                      }}
-                    >
+                    <p className="text-sm font-semibold leading-5 text-foreground">
                       {signal.title}
                     </p>
+                    <p className="mt-2 text-xs leading-5 text-muted-foreground group-hover:text-foreground/85">
+                      {signal.whyItMatters}
+                    </p>
+                    <div className="mt-3 border-t border-border/70 pt-3 dark:border-white/10">
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                        Use with
+                      </p>
+                      <p className="mt-1 text-xs leading-5 text-foreground/85">
+                        {signal.bestFitAccounts.join(", ")}
+                      </p>
+                      <p className="mt-2 text-[10px] text-muted-foreground">
+                        {signal.evidenceLabel}
+                      </p>
+                    </div>
                   </button>
                 ))}
               </div>
@@ -445,37 +544,61 @@ const Index = () => {
           </aside>
         )}
 
-        {!panelOpen && stripePlays.length > 0 && (
-          <aside className="pointer-events-auto absolute right-6 top-1/2 z-20 hidden w-64 -translate-y-1/2 xl:block">
+        {!panelOpen && prospectingHooks.length > 0 && (
+          <aside className="pointer-events-auto absolute right-6 top-1/2 z-20 hidden w-72 -translate-y-1/2 xl:block">
             <div className="rounded-3xl border border-border bg-background/60 p-4 shadow-2xl backdrop-blur-md dark:border-white/10">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                Suggested Stripe Plays
-              </p>
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                  {panelScopeLabel === "your regions" ? "Prospecting Hooks" : `${panelScopeLabel} Hooks`}
+                </p>
+                <p className="mt-1 text-[10px] text-muted-foreground/80">
+                  Copy a Kai prompt, add an account, and draft outreach.
+                </p>
+              </div>
 
               <div className="mt-4 space-y-3">
-                {stripePlays.map((play) => (
-                  <button
-                    key={play.product}
-                    type="button"
-                    onClick={() => play.region && handleSelectRegion(play.region)}
-                    className="group w-full rounded-2xl border border-border/80 bg-background/45 p-3 text-left transition-colors hover:border-primary/60 hover:bg-secondary/60 disabled:cursor-default dark:border-white/10 dark:hover:border-primary/60"
-                    disabled={!play.region}
+                {prospectingHooks.map((hook) => (
+                  <div
+                    key={hook.id}
+                    className="rounded-2xl border border-border/80 bg-background/45 p-3 text-left dark:border-white/10"
                   >
-                    <div className="flex items-center justify-between gap-3">
-                      <span className="text-xs font-semibold text-foreground">{play.product}</span>
-                      <span className="rounded-full bg-primary/12 px-2 py-0.5 text-[10px] font-semibold text-primary">
-                        {play.count}x
-                      </span>
-                    </div>
-                    <p className="mt-2 text-xs leading-5 text-muted-foreground group-hover:text-foreground/85">
-                      {play.reason}
+                    <p className="text-sm font-semibold leading-5 text-foreground">{hook.title}</p>
+                    <p className="mt-2 text-xs leading-5 text-muted-foreground">
+                      {hook.angle}
                     </p>
-                    {play.region && (
-                      <p className="mt-2 text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
-                        Strongest in {REGIONS[play.region]?.name ?? play.region}
-                      </p>
-                    )}
-                  </button>
+
+                    <div className="mt-3 space-y-2 border-t border-border/70 pt-3 dark:border-white/10">
+                      <div>
+                        <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                          Best for
+                        </p>
+                        <p className="mt-1 text-xs leading-5 text-foreground/85">
+                          {hook.bestFor.join(", ")}
+                        </p>
+                      </div>
+
+                      <div>
+                        <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                          Stripe context
+                        </p>
+                        <p className="mt-1 text-xs leading-5 text-foreground/85">
+                          {hook.stripeContext.join(" + ")}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="mt-3 flex items-center justify-between gap-3">
+                      <span className="text-[10px] text-muted-foreground">{hook.evidenceLabel}</span>
+                      <button
+                        type="button"
+                        onClick={() => copyKaiPrompt(hook)}
+                        className="inline-flex items-center gap-1.5 rounded-full bg-primary/12 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-primary transition-colors hover:bg-primary/20"
+                      >
+                        <Clipboard className="h-3 w-3" />
+                        Kai
+                      </button>
+                    </div>
+                  </div>
                 ))}
               </div>
             </div>
