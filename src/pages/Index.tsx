@@ -468,8 +468,16 @@ const Index = () => {
       </header>
 
       <main className="flex-1 min-h-0 flex items-center justify-center px-4 relative z-10">
-        {!panelOpen && briefItems.length > 0 && (
-          <aside className="pointer-events-auto absolute left-6 top-[118px] z-20 hidden w-[280px] 2xl:block">
+        {briefItems.length > 0 && (
+          <aside
+            aria-hidden={panelOpen}
+            className={
+              "absolute left-6 top-[118px] z-20 hidden w-[280px] transition-all duration-300 ease-out 2xl:block " +
+              (panelOpen
+                ? "pointer-events-none -translate-x-4 opacity-0"
+                : "pointer-events-auto translate-x-0 opacity-100")
+            }
+          >
             <div className="rounded-3xl border border-border bg-background/55 p-4 shadow-2xl backdrop-blur-md dark:border-white/10">
               <div>
                 <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
@@ -508,8 +516,16 @@ const Index = () => {
           </aside>
         )}
 
-        {!panelOpen && briefTakeaways.length > 0 && (
-          <aside className="pointer-events-auto absolute right-6 top-[118px] z-20 hidden w-[280px] 2xl:block">
+        {briefTakeaways.length > 0 && (
+          <aside
+            aria-hidden={panelOpen}
+            className={
+              "absolute right-6 top-[118px] z-20 hidden w-[280px] transition-all duration-300 ease-out 2xl:block " +
+              (panelOpen
+                ? "pointer-events-none translate-x-4 opacity-0"
+                : "pointer-events-auto translate-x-0 opacity-100")
+            }
+          >
             <div className="rounded-3xl border border-border bg-background/55 p-4 shadow-2xl backdrop-blur-md dark:border-white/10">
               <div>
                 <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
