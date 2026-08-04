@@ -472,7 +472,7 @@ const Index = () => {
           <aside
             aria-hidden={panelOpen}
             className={
-              "absolute left-5 top-[118px] z-20 hidden w-[260px] transition-all duration-300 ease-out xl:block 2xl:left-6 2xl:w-[280px] " +
+              "absolute left-5 top-[118px] z-20 hidden w-[260px] transition-all duration-300 ease-out [@media_(min-width:1280px)_and_(min-height:850px)]:block 2xl:left-6 2xl:w-[280px] " +
               (panelOpen
                 ? "pointer-events-none -translate-x-4 opacity-0"
                 : "pointer-events-auto translate-x-0 opacity-100")
@@ -520,7 +520,7 @@ const Index = () => {
           <aside
             aria-hidden={panelOpen}
             className={
-              "absolute right-5 top-[118px] z-20 hidden w-[260px] transition-all duration-300 ease-out xl:block 2xl:right-6 2xl:w-[280px] " +
+              "absolute right-5 top-[118px] z-20 hidden w-[260px] transition-all duration-300 ease-out [@media_(min-width:1280px)_and_(min-height:850px)]:block 2xl:right-6 2xl:w-[280px] " +
               (panelOpen
                 ? "pointer-events-none translate-x-4 opacity-0"
                 : "pointer-events-auto translate-x-0 opacity-100")
