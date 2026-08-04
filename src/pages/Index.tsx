@@ -331,7 +331,7 @@ const Index = () => {
       })
         .filter((item) => item.score > 0)
         .sort((a, b) => b.score - a.score)
-        .slice(0, 3);
+        .slice(0, 2);
 
       const evidenceFor = (count: number) =>
         primaryScope.length === 1
@@ -472,7 +472,7 @@ const Index = () => {
           <aside
             aria-hidden={panelOpen}
             className={
-              "absolute left-4 top-[110px] z-20 hidden w-[310px] origin-top-left transition-all duration-300 ease-out xl:block 2xl:left-6 2xl:top-[118px] 2xl:w-[280px] [@media_(max-height:850px)]:scale-[0.82] " +
+              "absolute left-5 top-1/2 z-20 hidden w-[300px] -translate-y-1/2 transition-all duration-300 ease-out xl:block 2xl:left-6 " +
               (panelOpen
                 ? "pointer-events-none -translate-x-4 opacity-0"
                 : "pointer-events-auto translate-x-0 opacity-100")
@@ -480,10 +480,10 @@ const Index = () => {
           >
             <div className="rounded-3xl border border-border bg-background/55 p-4 shadow-2xl backdrop-blur-md dark:border-white/10">
               <div>
-                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
                   Today’s Brief
                 </p>
-                <p className="mt-1 text-[10px] text-muted-foreground/80">
+                <p className="mt-1 text-xs text-muted-foreground/85">
                   {panelScopeLabel === "your selected regions"
                     ? "What the morning briefing is tracking."
                     : `What ${panelScopeLabel} is tracking today.`}
@@ -498,14 +498,14 @@ const Index = () => {
                     onClick={() => item.primaryRegion && handleSelectRegion(item.primaryRegion)}
                     className="group flex w-full gap-3 rounded-2xl border border-border/80 bg-background/40 p-3 text-left transition-colors hover:border-primary/60 hover:bg-secondary/60 dark:border-white/10 dark:hover:border-primary/60"
                   >
-                    <span className="mt-0.5 text-[10px] font-semibold text-primary/80">
+                    <span className="mt-0.5 text-xs font-semibold text-primary/80">
                       {String(index + 1).padStart(2, "0")}
                     </span>
                     <span className="min-w-0 flex-1">
-                      <span className="block text-sm font-semibold leading-5 text-foreground">
+                      <span className="block text-[15px] font-semibold leading-5 text-foreground">
                         {item.title}
                       </span>
-                      <span className="mt-1 block text-[10px] text-muted-foreground">
+                      <span className="mt-1 block text-xs text-muted-foreground">
                         {item.evidenceLabel}
                       </span>
                     </span>
@@ -520,47 +520,47 @@ const Index = () => {
           <aside
             aria-hidden={panelOpen}
             className={
-              "absolute right-4 top-[110px] z-20 hidden w-[310px] origin-top-right transition-all duration-300 ease-out xl:block 2xl:right-6 2xl:top-[118px] 2xl:w-[280px] [@media_(max-height:850px)]:scale-[0.82] " +
+              "absolute right-5 top-1/2 z-20 hidden w-[340px] -translate-y-1/2 transition-all duration-300 ease-out xl:block 2xl:right-6 " +
               (panelOpen
                 ? "pointer-events-none translate-x-4 opacity-0"
                 : "pointer-events-auto translate-x-0 opacity-100")
             }
           >
-            <div className="rounded-3xl border border-border bg-background/55 p-4 shadow-2xl backdrop-blur-md dark:border-white/10">
+            <div className="rounded-3xl border border-border bg-background/55 p-3.5 shadow-2xl backdrop-blur-md dark:border-white/10">
               <div>
-                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
                   Takeaways
                 </p>
-                <p className="mt-1 text-[10px] text-muted-foreground/80">
+                <p className="mt-1 text-xs text-muted-foreground/85">
                   Why today’s brief may matter commercially.
                 </p>
               </div>
 
-              <div className="mt-4 space-y-3">
+              <div className="mt-3 space-y-2.5">
                 {briefTakeaways.map((takeaway) => (
                   <button
                     key={takeaway.id}
                     type="button"
                     onClick={() => takeaway.primaryRegion && handleSelectRegion(takeaway.primaryRegion)}
-                    className="group w-full rounded-2xl border border-border/80 bg-background/40 p-3 text-left transition-colors hover:border-primary/60 hover:bg-secondary/60 dark:border-white/10 dark:hover:border-primary/60"
+                    className="group w-full rounded-2xl border border-border/80 bg-background/40 p-2.5 text-left transition-colors hover:border-primary/60 hover:bg-secondary/60 dark:border-white/10 dark:hover:border-primary/60"
                   >
-                    <p className="text-sm font-semibold leading-5 text-foreground">
+                    <p className="text-[15px] font-semibold leading-5 text-foreground">
                       {takeaway.title.replace(" hook", "")}
                     </p>
-                    <p className="mt-2 text-xs leading-5 text-muted-foreground group-hover:text-foreground/85">
+                    <p className="mt-1.5 text-sm leading-5 text-muted-foreground group-hover:text-foreground/85">
                       {takeaway.commercialAngle}
                     </p>
-                    <div className="mt-3 flex flex-wrap gap-1.5">
+                    <div className="mt-2 flex flex-wrap gap-1.5">
                       {takeaway.accountTypes.slice(0, 3).map((type) => (
                         <span
                           key={type}
-                          className="rounded-full border border-border/70 px-2 py-0.5 text-[10px] text-muted-foreground dark:border-white/10"
+                          className="rounded-full border border-border/70 px-2 py-0.5 text-[11px] text-muted-foreground dark:border-white/10"
                         >
                           {type}
                         </span>
                       ))}
                     </div>
-                    <p className="mt-3 text-[10px] text-primary/80">
+                    <p className="mt-2 text-xs text-primary/80">
                       {takeaway.stripeContext.slice(0, 3).join(" + ")}
                     </p>
                   </button>
