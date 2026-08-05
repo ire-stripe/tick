@@ -20,49 +20,41 @@ export const MiniPlayer = ({ visible, onExpand }: Props) => {
 
   return (
     <div
-      className="fixed z-50"
-      style={{
-        right: 20,
-        bottom: 80,
-        width: 320,
-        maxWidth: "calc(100vw - 40px)",
-        pointerEvents: show ? "auto" : "none",
-        opacity: show ? 1 : 0,
-        transform: show ? "translateY(0)" : "translateY(12px)",
-        transition: "opacity 300ms ease-out, transform 300ms ease-out",
-      }}
+      className={
+        "fixed bottom-20 left-1/2 z-50 w-[360px] max-w-[calc(100vw-32px)] transition-all duration-300 ease-out " +
+        (show
+          ? "pointer-events-auto -translate-x-1/2 translate-y-0 opacity-100"
+          : "pointer-events-none -translate-x-1/2 translate-y-3 opacity-0")
+      }
     >
       {episode && (
-        <div
-          className="rounded-2xl px-4 py-3 flex items-center gap-3"
-          style={{
-            background: "rgba(17, 29, 46, 0.95)",
-            backdropFilter: "blur(20px)",
-            WebkitBackdropFilter: "blur(20px)",
-            border: "1px solid rgba(255,255,255,0.08)",
-            boxShadow: "0 12px 40px rgba(0,0,0,0.5)",
-          }}
-        >
+        <div className="flex items-center gap-3 rounded-2xl border border-border bg-background/90 px-4 py-3 text-foreground shadow-2xl backdrop-blur-xl dark:border-white/10 dark:bg-slate-950/90">
           <button
             onClick={toggle}
             aria-label={playing ? "Pause" : "Play"}
-            className="h-10 w-10 shrink-0 rounded-full bg-primary text-primary-foreground flex items-center justify-center hover:scale-105 transition-transform"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground transition-transform hover:scale-105"
           >
             {playing ? (
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                <rect x="6" y="5" width="4" height="14" rx="1" />
+                <rect x="14" y="5" width="4" height="14" rx="1" />
+              </svg>
             ) : (
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M8 5v14l11-7z" />
+              </svg>
             )}
           </button>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center justify-between gap-2 mb-1">
+
+          <div className="min-w-0 flex-1">
+            <div className="mb-1 flex items-center justify-between gap-3">
               <button
                 onClick={() => onExpand?.(episode.regionId)}
-                className="text-xs font-semibold truncate text-left hover:text-primary transition-colors"
+                className="min-w-0 truncate text-left text-sm font-semibold text-foreground transition-colors hover:text-primary"
               >
                 {episode.regionName} <span className="ml-0.5">{episode.regionFlags}</span>
               </button>
-              <div className="text-[10px] text-muted-foreground tabular-nums shrink-0">
+              <div className="shrink-0 text-xs tabular-nums text-muted-foreground">
                 {fmt(currentTime)} / {fmt(duration || 0)}
               </div>
             </div>
@@ -73,13 +65,14 @@ export const MiniPlayer = ({ visible, onExpand }: Props) => {
               compact
             />
           </div>
+
           <button
             onClick={(e) => {
               e.stopPropagation();
               stop();
             }}
             aria-label="Close mini player"
-            className="h-7 w-7 shrink-0 rounded-full flex items-center justify-center hover:bg-white/10 text-muted-foreground hover:text-foreground transition-colors"
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-foreground/10 hover:text-foreground"
           >
             <X className="h-3.5 w-3.5" />
           </button>
