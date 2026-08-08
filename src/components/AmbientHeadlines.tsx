@@ -23,6 +23,7 @@ export const AmbientHeadlines = ({ globeRef, items, hidden }: Props) => {
   const [current, setCurrent] = useState<AmbientItem | null>(null);
   const [visible, setVisible] = useState(false);
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
+  const [isLight, setIsLight] = useState(false);
   const shuffleRef = useRef<AmbientItem[]>([]);
   const timers = useRef<number[]>([]);
 
@@ -30,6 +31,16 @@ export const AmbientHeadlines = ({ globeRef, items, hidden }: Props) => {
     timers.current.forEach((t) => window.clearTimeout(t));
     timers.current = [];
   };
+
+  useEffect(() => {
+    const readTheme = () => setIsLight(document.documentElement.classList.contains("light"));
+    readTheme();
+
+    const observer = new MutationObserver(readTheme);
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
+
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
     if (hidden || items.length < 5) {
@@ -106,13 +117,17 @@ export const AmbientHeadlines = ({ globeRef, items, hidden }: Props) => {
         left: pos.x,
         top: pos.y - 22,
         transform: "translate(-50%, -100%)",
-        opacity: visible ? 0.17 : 0,
+        opacity: visible ? (isLight ? 0.46 : 0.24) : 0,
         transition: `opacity ${FADE_MS}ms ease`,
-        color: "#fff",
+        color: isLight ? "#334155" : "#fff",
         fontSize: "12px",
         fontFamily: "Inter, system-ui, sans-serif",
+        fontWeight: 500,
+        letterSpacing: "0.01em",
         whiteSpace: "nowrap",
-        textShadow: "0 1px 4px rgba(0,0,0,0.6)",
+        textShadow: isLight
+          ? "0 1px 2px rgba(255,255,255,0.95), 0 0 18px rgba(255,255,255,0.75)"
+          : "0 1px 4px rgba(0,0,0,0.6), 0 0 18px rgba(0,0,0,0.35)",
         zIndex: 5,
       }}
     >
