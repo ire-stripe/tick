@@ -7,7 +7,7 @@ const GOOGLE_SERVICE_ACCOUNT_JSON = Deno.env.get("GOOGLE_SERVICE_ACCOUNT_JSON")!
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
 
-const PROMPT_VERSION = "v1";
+const PROMPT_VERSION = "v2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -103,8 +103,9 @@ async function callGemini(prompt: string): Promise<string> {
       body: JSON.stringify({
         contents: [{ role: "user", parts: [{ text: prompt }] }],
         generationConfig: {
-          temperature: 0.25,
+          temperature: 0.2,
           maxOutputTokens: 1024,
+          responseMimeType: "application/json",
         },
       }),
       signal: AbortSignal.timeout(30000),
@@ -131,17 +132,26 @@ function parseDraft(raw: string): { subject: string; body: string } {
     .replace(/```\n?/g, "")
     .trim();
 
-  const parsed = JSON.parse(cleaned);
+  let parsed: any;
+  try {
+    parsed = JSON.parse(cleaned);
+  } catch (_error) {
+    throw new Error(`Gemini returned invalid JSON: ${cleaned.slice(0, 300)}`);
+  }
 
-  const body = String(parsed.body ?? "").trim();
+  const body = Array.isArray(parsed.body_lines)
+    ? parsed.body_lines.map((line: unknown) => String(line)).join("\n")
+    : String(parsed.body ?? "").trim();
 
-  if (!body) {
+  const normalizedBody = body.trim();
+
+  if (!normalizedBody) {
     throw new Error("Gemini returned an empty body");
   }
 
   return {
     subject: "From Stripe",
-    body,
+    body: normalizedBody,
   };
 }
 
@@ -177,15 +187,24 @@ PROOF POINT
 ${article.proof_point_text ?? ""}
 
 Required output:
-Return valid JSON only, no markdown fences:
+Return valid JSON only, no markdown fences, with this exact shape:
 {
   "subject": "From Stripe",
-  "body": "..."
+  "body_lines": [
+    "Hey {{first_name}},",
+    "",
+    "First paragraph line.",
+    "",
+    "Would you be open to a quick 15 minutes to explore if there's a fit?",
+    "",
+    "Talk soon,",
+    "{{sender_name}}"
+  ]
 }
 
 Hard rules:
-- Subject line must be exactly: From Stripe
-- Body must start exactly with: Hey {{first_name}},
+- subject must be exactly: From Stripe
+- body_lines[0] must be exactly: Hey {{first_name}},
 - Use {{company}} as the prospect company merge tag where useful. Do not invent a specific prospect company.
 - Opening sentence must reference the specific news event: company, event, and product/context from the article. No vague openers.
 - Let the observation breathe for a full sentence before connecting to pain.
@@ -194,8 +213,8 @@ Hard rules:
 - Weave the proof point naturally. Paraphrase it; do not quote it verbatim.
 - Build toward one DIQ.
 - DIQ must be one open-ended question, genuinely curious, not yes/no, not a pitch, no Stripe product names, and connected to the pain.
-- CTA must be exactly: Would you be open to a quick 15 minutes to explore if there's a fit?
-- Sign-off must be exactly:
+- CTA line must be exactly: Would you be open to a quick 15 minutes to explore if there's a fit?
+- Sign-off lines must be exactly:
 Talk soon,
 {{sender_name}}
 - Total length must be 80-100 words excluding the subject and sign-off.
