@@ -1,5 +1,46 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+const ALLOWED_INDUSTRIES = [
+  "Technology",
+  "Agriculture",
+  "Auto",
+  "Construction",
+  "Consumer Packaged Goods",
+  "Education",
+  "Energy, Utilities & Waste",
+  "Financial Services",
+  "Food & Beverage",
+  "Gambling",
+  "Gaming",
+  "Healthcare",
+  "Holding Companies",
+  "Hospitality",
+  "Insurance",
+  "Manufacturing & Heavy Industry",
+  "Media",
+  "Non-Profits",
+  "Organizations",
+  "Professional Services",
+  "Public Sector",
+  "Real Estate",
+  "Retail",
+  "Ticketing & Events",
+  "Transportation & Logistics",
+  "Travel & Leisure",
+  "Wellness & Fitness",
+] as const;
+
+const ALLOWED_INDUSTRY_SET = new Set<string>(ALLOWED_INDUSTRIES);
+
+function cleanIndustries(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+
+  const cleaned = value
+    .map((industry) => String(industry).trim())
+    .filter((industry) => ALLOWED_INDUSTRY_SET.has(industry));
+
+  return Array.from(new Set(cleaned)).slice(0, 3);
+}
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -80,17 +121,22 @@ serve(async (req) => {
     return new Response("Unauthorized", { status: 401 });
   }
 
-  // Fetch brief articles from the last 24h that don't have a play yet
+// Fetch brief articles from the last 72h that either need a play or need target industries.
   const cutoff = new Date(Date.now() - 72 * 60 * 60 * 1000).toISOString();
-  const { data: articles, error: artErr } = await supabase
+  const { data: candidateArticles, error: artErr } = await supabase
     .from("articles")
-    .select("id, title, summary, region, spoken_summary")
+    .select("id, title, summary, region, spoken_summary, stripe_play, target_industries")
     .eq("is_in_brief", true)
-    .is("stripe_play", null)
     .gte("published_at", cutoff)
     .order("published_at", { ascending: false });
 
-  if (artErr || !articles?.length) {
+  const articles = (candidateArticles ?? []).filter((article) => {
+    const hasPlay = !!article.stripe_play;
+    const hasIndustries = Array.isArray(article.target_industries) && article.target_industries.length > 0;
+    return !hasPlay || !hasIndustries;
+  });
+
+  if (artErr || !articles.length) {
     return new Response(JSON.stringify({ message: "No articles to process", error: artErr }), {
       status: 200,
       headers: { "Content-Type": "application/json" },
@@ -137,35 +183,87 @@ serve(async (req) => {
       (a, i) => `[${i}] "${a.title}" — ${a.summary || a.spoken_summary || ""}`
     ).join("\n\n");
 
-    const prompt = `You are a Stripe GTM strategist. For each news article below, determine if there's a genuine Stripe product opportunity. If yes, write a short "Stripe Play" and match it to the best proof point from our success stories.
+    const prompt = `You are a Stripe SDR prospecting strategist for EMEA fintech and technology market signals.
 
-REGION: ${region}
+    Your job is to convert public news into useful outbound plays for Stripe SDRs.
 
-STRIPE PRODUCTS AVAILABLE IN THIS REGION:
-${productContext}
+    You are NOT a general GTM strategist.
+    You are NOT writing product marketing copy.
+    You are NOT trying to force a Stripe angle onto every article.
 
-SUCCESS STORIES (for proof points):
-${storiesContext}
+    For each article, decide whether the news creates a credible reason for an SDR to contact a company in a relevant industry today.
 
-ARTICLES:
-${articlesContext}
+    A good Stripe Play must have all 4:
+    1. A concrete news trigger: something specific happened, such as a launch, funding round, expansion, regulation, outage, partnership, fraud issue, product shift, or market movement.
+    2. A commercial pain: the news points to a real operational, payments, billing, fraud, compliance, money movement, conversion, or expansion problem.
+    3. A Stripe-relevant angle: one or more available Stripe products plausibly help with that pain.
+    4. SDR usability: the play is specific enough that an SDR could use it as an outreach hook without sounding generic.
 
-For each article, respond with valid JSON array. Each element:
-{
-  "index": <article index number>,
-  "has_play": true/false,
-  "stripe_play": "<2-3 sentence actionable play connecting the news to a Stripe product. Include target persona and why now. Empty string if no play.>",
-  "products": ["<product_id>", ...],
-  "proof_point": "<One sentence referencing a success story that proves this works. Include the company name and metric. Empty string if no match.>",
-  "proof_story_company": "<company name from success stories list, or empty>"
-}
+    Reject the article if:
+    - The Stripe connection is weak or speculative.
+    - The article is only about executive moves, awards, vague funding, opinion, internal drama, or generic market commentary.
+    - The play would sound like “you are growing, use Stripe.”
+    - The article is interesting but does not create an actionable prospecting trigger.
 
-Rules:
-- Only return has_play: true if the connection is GENUINE and actionable for an SDR.
-- Do NOT force weak connections. If an article is about a CEO appointment or internal company drama with no payment/fintech angle, return has_play: false.
-- Products must be from the available list and available in this region.
-- Proof points should match by product AND ideally by industry/use case.
-- Return ONLY the JSON array, no markdown fences.`;
+    REGION: ${region}
+
+    STRIPE PRODUCTS AVAILABLE IN THIS REGION:
+    ${productContext}
+
+    SUCCESS STORIES FOR PROOF POINTS:
+    Use these only as supporting evidence. Do not force a proof point if none fits.
+    ${storiesContext}
+
+    ALLOWED TARGET INDUSTRIES:
+    ${ALLOWED_INDUSTRIES.map((industry) => `- ${industry}`).join("\n")}
+
+    ARTICLES:
+    ${articlesContext}
+
+    For each article, respond with a valid JSON array. Each element must have this exact shape:
+    {
+      "index": <article index number>,
+      "has_play": true/false,
+      "stripe_play": "<If has_play is true: 1-2 sharp sentences describing the outbound play. Name the target account type/persona, the pain created by the news, why now, and the Stripe-relevant angle. If has_play is false: empty string.>",
+      "products": ["<product_id>", ...],
+      "target_industries": ["<1-3 allowed target industries>"],
+      "proof_point": "<One concise sentence referencing the best matching success story. Include the company name and result/metric if available. Empty string if no credible match.>",
+      "proof_story_company": "<company name from success stories list, or empty>"
+    }
+
+    Stripe Play writing rules:
+    - Make the play useful to an SDR deciding who to prospect.
+    - Start from the news trigger, not from the Stripe product.
+    - Be specific about the account type: e.g. fintechs expanding internationally, marketplaces adding seller services, retailers improving checkout conversion, SaaS companies moving upmarket.
+    - Explain the “why now” clearly.
+    - Do not use generic phrasing like “streamline payments”, “enhance customer experience”, or “unlock growth” unless tied to a specific pain.
+    - Do not write fluffy product marketing copy.
+    - Do not mention unsupported Stripe products.
+    - Products must be from the available product list and available in this region.
+
+    Industry tagging rules:
+    - target_industries must contain 1-3 values from ALLOWED TARGET INDUSTRIES exactly.
+    - Do not invent, rename, abbreviate, or pluralize industries.
+    - Choose industries based on which account types an SDR should use this play with, not merely the article publisher's industry.
+    - If the article is about a fintech infrastructure issue, likely industries include Financial Services and Technology.
+    - If the article is about checkout, ecommerce, consumer demand, loyalty, or payments conversion, consider Retail, Food & Beverage, Travel & Leisure, Hospitality, or Ticketing & Events where relevant.
+    - If the article is about platforms, marketplaces, embedded finance, seller onboarding, or payouts, consider Technology, Professional Services, Retail, Transportation & Logistics, or Financial Services depending on the use case.
+    - If no target industry is clear, return has_play: false.
+
+    Proof point rules:
+    - Match proof points by product first, then use case, then industry.
+    - The proof point should support the play, not become the whole play.
+    - Do not use a proof point if it feels unrelated.
+    - proof_story_company must exactly match the company name from the success stories list when used.
+
+    Quality bar:
+    Before returning has_play: true, silently ask:
+    - Would this help an SDR know which account type to contact?
+    - Could this become a credible first sentence in an email?
+    - Is the Stripe angle grounded in the article, not invented?
+    - Is the proof point actually relevant?
+
+    Return ONLY the JSON array. No markdown fences. No commentary.`;
 
     const response = await callGemini(prompt);
 
@@ -195,15 +293,18 @@ Rules:
         if (match) storyId = match.id;
       }
 
-      const { error: updateErr } = await supabase
-        .from("articles")
-        .update({
-          stripe_play: play.stripe_play,
-          stripe_products: play.products,
-          success_story_id: storyId,
-          proof_point_text: play.proof_point || null,
-        })
-        .eq("id", article.id);
+      const targetIndustries = cleanIndustries(play.target_industries);
+
+            const { error: updateErr } = await supabase
+              .from("articles")
+              .update({
+                stripe_play: play.stripe_play,
+                stripe_products: play.products,
+                target_industries: targetIndustries,
+                success_story_id: storyId,
+                proof_point_text: play.proof_point || null,
+              })
+              .eq("id", article.id);
 
       if (!updateErr) totalProcessed++;
     }

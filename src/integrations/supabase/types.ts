@@ -14,6 +14,77 @@ export type Database = {
   }
   public: {
     Tables: {
+      article_email_copy_events: {
+        Row: {
+          article_id: string
+          created_at: string
+          draft_id: string | null
+          id: string
+        }
+        Insert: {
+          article_id: string
+          created_at?: string
+          draft_id?: string | null
+          id?: string
+        }
+        Update: {
+          article_id?: string
+          created_at?: string
+          draft_id?: string | null
+          id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "article_email_copy_events_article_id_fkey"
+            columns: ["article_id"]
+            isOneToOne: false
+            referencedRelation: "articles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "article_email_copy_events_draft_id_fkey"
+            columns: ["draft_id"]
+            isOneToOne: false
+            referencedRelation: "article_email_drafts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      article_email_drafts: {
+        Row: {
+          article_id: string
+          body: string
+          created_at: string
+          id: string
+          prompt_version: string
+          subject: string
+        }
+        Insert: {
+          article_id: string
+          body: string
+          created_at?: string
+          id?: string
+          prompt_version?: string
+          subject: string
+        }
+        Update: {
+          article_id?: string
+          body?: string
+          created_at?: string
+          id?: string
+          prompt_version?: string
+          subject?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "article_email_drafts_article_id_fkey"
+            columns: ["article_id"]
+            isOneToOne: false
+            referencedRelation: "articles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       articles: {
         Row: {
           article_audio_url: string | null
@@ -24,11 +95,16 @@ export type Database = {
           is_breaking: boolean
           is_in_brief: boolean
           language: string
+          proof_point_text: string | null
           published_at: string
           region: string
           source: string
           spoken_summary: string | null
+          stripe_play: string | null
+          stripe_products: string[] | null
+          success_story_id: string | null
           summary: string | null
+          target_industries: string[]
           ticker_source: boolean
           title: string
           url: string
@@ -42,11 +118,16 @@ export type Database = {
           is_breaking?: boolean
           is_in_brief?: boolean
           language?: string
+          proof_point_text?: string | null
           published_at?: string
           region: string
           source: string
           spoken_summary?: string | null
+          stripe_play?: string | null
+          stripe_products?: string[] | null
+          success_story_id?: string | null
           summary?: string | null
+          target_industries?: string[]
           ticker_source?: boolean
           title: string
           url: string
@@ -60,16 +141,29 @@ export type Database = {
           is_breaking?: boolean
           is_in_brief?: boolean
           language?: string
+          proof_point_text?: string | null
           published_at?: string
           region?: string
           source?: string
           spoken_summary?: string | null
+          stripe_play?: string | null
+          stripe_products?: string[] | null
+          success_story_id?: string | null
           summary?: string | null
+          target_industries?: string[]
           ticker_source?: boolean
           title?: string
           url?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "articles_success_story_id_fkey"
+            columns: ["success_story_id"]
+            isOneToOne: false
+            referencedRelation: "success_stories"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       episodes: {
         Row: {
@@ -125,6 +219,48 @@ export type Database = {
         }
         Relationships: []
       }
+      stripe_products: {
+        Row: {
+          availability_phase: string
+          category: string
+          created_at: string
+          description: string
+          id: string
+          is_roadmap: boolean
+          name: string
+          pitch_angle: string
+          region_relevance: string[]
+          target_personas: string[]
+          use_cases: string[]
+        }
+        Insert: {
+          availability_phase?: string
+          category: string
+          created_at?: string
+          description: string
+          id: string
+          is_roadmap?: boolean
+          name: string
+          pitch_angle?: string
+          region_relevance?: string[]
+          target_personas?: string[]
+          use_cases?: string[]
+        }
+        Update: {
+          availability_phase?: string
+          category?: string
+          created_at?: string
+          description?: string
+          id?: string
+          is_roadmap?: boolean
+          name?: string
+          pitch_angle?: string
+          region_relevance?: string[]
+          target_personas?: string[]
+          use_cases?: string[]
+        }
+        Relationships: []
+      }
       subscriptions: {
         Row: {
           active: boolean
@@ -146,6 +282,42 @@ export type Database = {
           id?: string
           region?: string
           slack_user_id?: string
+        }
+        Relationships: []
+      }
+      success_stories: {
+        Row: {
+          company: string
+          created_at: string
+          id: string
+          industry: string
+          metric: string
+          products: string[]
+          region: string
+          summary: string
+          url: string
+        }
+        Insert: {
+          company: string
+          created_at?: string
+          id?: string
+          industry: string
+          metric?: string
+          products?: string[]
+          region: string
+          summary: string
+          url: string
+        }
+        Update: {
+          company?: string
+          created_at?: string
+          id?: string
+          industry?: string
+          metric?: string
+          products?: string[]
+          region?: string
+          summary?: string
+          url?: string
         }
         Relationships: []
       }
