@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { subscribeArticleAudio, toggleArticleAudio } from "@/lib/articleAudio";
@@ -255,42 +256,44 @@ export const StoryCard = ({
         </div>
       </div>
 
-      {draftOpen && draft && (
-        <div
-          className="fixed inset-0 z-[90] flex items-center justify-center bg-black/55 px-4 backdrop-blur-sm"
-          onClick={() => setDraftOpen(false)}
-        >
+      {draftOpen && draft &&
+        createPortal(
           <div
-            className="glass w-full max-w-lg rounded-2xl border border-white/10 bg-card/95 p-5 text-card-foreground shadow-2xl"
-            onClick={(e) => e.stopPropagation()}
+            className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm sm:p-6"
+            onClick={() => setDraftOpen(false)}
           >
-            <div className="mb-4 flex items-center justify-between gap-4">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-primary dark:text-[rgba(218,165,32,0.95)]">
-                Draft Email
+            <div
+              className="glass flex max-h-[min(760px,calc(100vh-2rem))] w-full max-w-2xl flex-col rounded-2xl border border-white/10 bg-card/95 p-4 text-card-foreground shadow-2xl sm:p-5"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="mb-4 flex shrink-0 items-center justify-between gap-4">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-primary dark:text-[rgba(218,165,32,0.95)]">
+                  Draft Email
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setDraftOpen(false)}
+                  className="rounded-full px-2 py-1 text-sm text-muted-foreground transition-colors hover:bg-foreground/10 hover:text-foreground"
+                  aria-label="Close draft email"
+                >
+                  ×
+                </button>
               </div>
 
-              <button
-                type="button"
-                onClick={() => setDraftOpen(false)}
-                className="rounded-full px-2 py-1 text-sm text-muted-foreground transition-colors hover:bg-foreground/10 hover:text-foreground"
-                aria-label="Close draft email"
-              >
-                ×
-              </button>
-            </div>
+              <pre className="min-h-0 flex-1 overflow-y-auto whitespace-pre-wrap rounded-xl border border-border bg-background/70 p-4 font-sans text-sm leading-relaxed text-foreground">
+                {formatEmail(draft)}
+              </pre>
 
-            <pre className="max-h-[60vh] whitespace-pre-wrap rounded-xl border border-border bg-background/70 p-4 font-sans text-sm leading-relaxed text-foreground">
-              {formatEmail(draft)}
-            </pre>
-
-            <div className="mt-4 flex justify-end">
-              <Button onClick={handleCopyEmail} className="h-9 text-sm">
-                {copied ? "Copied" : "Copy email"}
-              </Button>
+              <div className="mt-4 flex shrink-0 justify-end">
+                <Button onClick={handleCopyEmail} className="h-9 text-sm">
+                  {copied ? "Copied" : "Copy email"}
+                </Button>
+              </div>
             </div>
-          </div>
-        </div>
-      )}
+          </div>,
+          document.body,
+        )}
     </article>
   );
 };

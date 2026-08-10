@@ -7,7 +7,7 @@ const GOOGLE_SERVICE_ACCOUNT_JSON = Deno.env.get("GOOGLE_SERVICE_ACCOUNT_JSON")!
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
 
-const PROMPT_VERSION = "v2";
+const PROMPT_VERSION = "v5";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -104,8 +104,7 @@ async function callGemini(prompt: string): Promise<string> {
         contents: [{ role: "user", parts: [{ text: prompt }] }],
         generationConfig: {
           temperature: 0.2,
-          maxOutputTokens: 1024,
-          responseMimeType: "application/json",
+          maxOutputTokens: 768,
         },
       }),
       signal: AbortSignal.timeout(30000),
@@ -126,33 +125,127 @@ async function callGemini(prompt: string): Promise<string> {
     .trim() ?? "";
 }
 
-function parseDraft(raw: string): { subject: string; body: string } {
+const CTA = "Would you be open to a quick 15 minutes to explore if there's a fit?";
+const SIGN_OFF = "Talk soon,\n{{sender_name}}";
+
+function normalizeDraftBody(raw: string): string {
   const cleaned = raw
-    .replace(/```json\n?/g, "")
-    .replace(/```\n?/g, "")
+    .replace(/```(?:text|markdown)?\n?/gi, "")
+    .replace(/```/g, "")
+    .replace(/^Subject:\s*From Stripe\s*/i, "")
     .trim();
 
-  let parsed: any;
+  const validationError = validateDraftBody(cleaned);
+  if (validationError) {
+    throw new Error(`${validationError}: ${cleaned.slice(0, 220)}`);
+  }
+
+  return cleaned;
+}
+
+function validateDraftBody(body: string): string | null {
+  if (!body) return "Gemini returned an empty draft";
+
+  if (!body.startsWith("Hey {{first_name}},")) {
+    return "Draft does not start with the required greeting";
+  }
+
+  if (!body.includes(CTA)) {
+    return "Draft is missing the required CTA";
+  }
+
+  if (!body.includes(SIGN_OFF)) {
+    return "Draft is missing the required sign-off";
+  }
+
+  if (!body.trim().endsWith(SIGN_OFF)) {
+    return "Draft does not end with the required sign-off";
+  }
+
+  if (body.includes("—")) {
+    return "Draft contains an em dash";
+  }
+
+  if (/Stripe Play|proof point|target industries/i.test(body)) {
+    return "Draft mentions internal labels";
+  }
+
+  if (/\b(I saw|I read|I noticed|you may have seen|you might have seen)\b/i.test(body)) {
+    return "Draft assumes the recipient has seen the article";
+  }
+
+  const wordsExcludingSignoff = body
+    .replace(SIGN_OFF, "")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean).length;
+
+  if (wordsExcludingSignoff < 70) {
+    return `Draft is too short (${wordsExcludingSignoff} words)`;
+  }
+
+  if (wordsExcludingSignoff > 125) {
+    return `Draft is too long (${wordsExcludingSignoff} words)`;
+  }
+
+  return null;
+}
+
+function cleanForEmail(value: unknown): string {
+  return String(value ?? "")
+    .replace(/\s+/g, " ")
+    .replace(/[“”]/g, "\"")
+    .replace(/[’]/g, "'")
+    .trim();
+}
+
+function shortHook(article: any): string {
+  const rawTitle = cleanForEmail(article.title || "this market shift");
+  const withoutTrailingPunctuation = rawTitle.replace(/[.!?]+$/, "");
+  const lowerTitle = withoutTrailingPunctuation.toLowerCase();
+
+  const whatCanMatch = lowerTitle.match(/^what (.+) can ([a-z0-9& .'-]+?) (.+)$/i);
+  if (whatCanMatch) {
+    return `questions around ${whatCanMatch[1]} ${whatCanMatch[2]} can ${whatCanMatch[3]}`;
+  }
+
+  if (lowerTitle.length <= 110) {
+    return lowerTitle;
+  }
+
+  return `${lowerTitle.slice(0, 107).trim()}...`;
+}
+
+function buildFallbackDraftBody(article: any): string {
+  const source = cleanForEmail(article.source || "the recent article");
+  const hook = shortHook(article);
+
+  const body = `Hey {{first_name}},
+
+A recent ${source} piece highlighted ${hook}. The signal is relevant because shifts like this can create pressure for {{company}} to make customer onboarding, conversion, and risk controls feel seamless while the operating model gets more complex.
+
+A comparable company used modern financial infrastructure to improve onboarding trust at scale, which feels relevant here. How are you thinking about turning this kind of market shift into a cleaner customer experience without adding operational drag?
+
+${CTA}
+
+${SIGN_OFF}`;
+
+  const validationError = validateDraftBody(body);
+  if (validationError) {
+    throw new Error(`Fallback draft failed validation: ${validationError}`);
+  }
+
+  return body;
+}
+
+async function generateCompleteDraftBody(article: any): Promise<string> {
   try {
-    parsed = JSON.parse(cleaned);
-  } catch (_error) {
-    throw new Error(`Gemini returned invalid JSON: ${cleaned.slice(0, 300)}`);
+    const raw = await callGemini(buildPrompt(article));
+    return normalizeDraftBody(raw);
+  } catch (error) {
+    console.warn("Gemini draft rejected; using fallback draft", (error as Error).message);
+    return buildFallbackDraftBody(article);
   }
-
-  const body = Array.isArray(parsed.body_lines)
-    ? parsed.body_lines.map((line: unknown) => String(line)).join("\n")
-    : String(parsed.body ?? "").trim();
-
-  const normalizedBody = body.trim();
-
-  if (!normalizedBody) {
-    throw new Error("Gemini returned an empty body");
-  }
-
-  return {
-    subject: "From Stripe",
-    body: normalizedBody,
-  };
 }
 
 function buildPrompt(article: any): string {
@@ -166,7 +259,7 @@ function buildPrompt(article: any): string {
 
   return `You write concise, high-quality cold prospecting emails for Stripe SDRs.
 
-Generate one email using this article as the hook, the Stripe Play as the commercial angle, and the proof point as light social proof.
+Generate one plain-text email body using this article as the hook, the Stripe Play as the commercial angle, and the proof point as light social proof.
 
 ARTICLE
 Title: ${article.title}
@@ -186,26 +279,19 @@ ${products || "Not specified"}
 PROOF POINT
 ${article.proof_point_text ?? ""}
 
-Required output:
-Return valid JSON only, no markdown fences, with this exact shape:
-{
-  "subject": "From Stripe",
-  "body_lines": [
-    "Hey {{first_name}},",
-    "",
-    "First paragraph line.",
-    "",
-    "Would you be open to a quick 15 minutes to explore if there's a fit?",
-    "",
-    "Talk soon,",
-    "{{sender_name}}"
-  ]
-}
+Output rules:
+- Return ONLY the email body as plain text.
+- Do not return JSON.
+- Do not use markdown.
+- Do not wrap the answer in code fences.
+- Do not include the subject line.
 
 Hard rules:
-- subject must be exactly: From Stripe
-- body_lines[0] must be exactly: Hey {{first_name}},
+- The email body must start exactly with: Hey {{first_name}},
 - Use {{company}} as the prospect company merge tag where useful. Do not invent a specific prospect company.
+- Opening sentence must frame the article as a market signal, not as something the recipient has read.
+- Do not say "I saw", "I read", "I noticed", "you may have seen", or anything that assumes the recipient has seen the article.
+- Good opener pattern: "A recent ${article.source ?? "industry"} piece highlighted..."
 - Opening sentence must reference the specific news event: company, event, and product/context from the article. No vague openers.
 - Let the observation breathe for a full sentence before connecting to pain.
 - Body must be 2-3 sentences before the CTA.
@@ -213,11 +299,11 @@ Hard rules:
 - Weave the proof point naturally. Paraphrase it; do not quote it verbatim.
 - Build toward one DIQ.
 - DIQ must be one open-ended question, genuinely curious, not yes/no, not a pitch, no Stripe product names, and connected to the pain.
-- CTA line must be exactly: Would you be open to a quick 15 minutes to explore if there's a fit?
-- Sign-off lines must be exactly:
+- CTA must be exactly: Would you be open to a quick 15 minutes to explore if there's a fit?
+- Sign-off must be exactly:
 Talk soon,
 {{sender_name}}
-- Total length must be 80-100 words excluding the subject and sign-off.
+- Total length must be 80-100 words excluding the sign-off.
 - Tone: conversational, warm, knowledgeable peer, short sentences.
 - Use natural connectors like “But the more X, the messier Y gets”.
 - No analyst language.
@@ -287,16 +373,15 @@ serve(async (req) => {
       });
     }
 
-    const raw = await callGemini(buildPrompt(article));
-    const draft = parseDraft(raw);
+    const body = await generateCompleteDraftBody(article);
 
     const { data: inserted, error: insertErr } = await supabase
       .from("article_email_drafts")
       .insert({
         article_id,
         prompt_version: PROMPT_VERSION,
-        subject: draft.subject,
-        body: draft.body,
+        subject: "From Stripe",
+        body,
       })
       .select("id, article_id, prompt_version, subject, body, created_at")
       .single();
