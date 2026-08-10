@@ -252,7 +252,7 @@ export const StoryCard = ({
               variant="secondary"
               onClick={handleDraftEmail}
               disabled={draftLoading}
-              className="h-8 text-xs"
+              className="h-8 cursor-pointer border border-border/70 bg-secondary/80 text-xs transition-all duration-150 hover:-translate-y-0.5 hover:border-primary/40 hover:bg-primary/10 hover:text-primary hover:shadow-sm disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:shadow-none dark:border-white/10 dark:bg-white/10 dark:hover:border-white/20 dark:hover:bg-white/15 dark:hover:text-foreground"
             >
               {draftLoading ? "Generating..." : "✉️ Draft Email"}
             </Button>

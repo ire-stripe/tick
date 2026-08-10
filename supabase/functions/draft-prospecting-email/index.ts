@@ -7,7 +7,7 @@ const GOOGLE_SERVICE_ACCOUNT_JSON = Deno.env.get("GOOGLE_SERVICE_ACCOUNT_JSON")!
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
 
-const PROMPT_VERSION = "v6";
+const PROMPT_VERSION = "v7";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -166,8 +166,16 @@ function validateDraftBody(body: string): string | null {
     return "Draft contains an em dash";
   }
 
+  if (/\.\.\.|…/.test(body)) {
+    return "Draft contains a truncated fragment";
+  }
+
   if (/Stripe Play|proof point|target industries/i.test(body)) {
     return "Draft mentions internal labels";
+  }
+
+  if (/\b(messy middle|market signal|a comparable company|this kind of market shift)\b/i.test(body)) {
+    return "Draft contains stiff template language";
   }
 
   if (/\b(I saw|I read|I noticed|you may have seen|you might have seen)\b/i.test(body)) {
@@ -199,32 +207,14 @@ function cleanForEmail(value: unknown): string {
     .trim();
 }
 
-function shortHook(article: any): string {
-  const rawTitle = cleanForEmail(article.title || "this market shift");
-  const withoutTrailingPunctuation = rawTitle.replace(/[.!?]+$/, "");
-  const lowerTitle = withoutTrailingPunctuation.toLowerCase();
-
-  const whatCanMatch = lowerTitle.match(/^what (.+) can ([a-z0-9& .'-]+?) (.+)$/i);
-  if (whatCanMatch) {
-    return `questions around ${whatCanMatch[1]} ${whatCanMatch[2]} can ${whatCanMatch[3]}`;
-  }
-
-  if (lowerTitle.length <= 110) {
-    return lowerTitle;
-  }
-
-  return `${lowerTitle.slice(0, 107).trim()}...`;
-}
-
 function buildFallbackDraftBody(article: any): string {
   const source = cleanForEmail(article.source || "the recent article");
-  const hook = shortHook(article);
 
   const body = `Hey {{first_name}},
 
-A ${source} piece highlighted ${hook}. It is a good reminder that moments like this usually create a messy middle for teams at {{company}}.
+A ${source} piece covered a payments story that looks simple on the surface, but gets more complicated once money movement sits behind it. The flip side is that customers still expect the experience to feel clean, even when onboarding, conversion, and risk checks are doing a lot of work in the background.
 
-Customers still expect the experience to feel simple, even when onboarding, conversion, and risk checks get more complex behind the scenes. A comparable company improved onboarding trust in a high-volume flow, which feels relevant here. How are you thinking about keeping that experience clean without adding more operational drag?
+Similar teams have kept trust high without making the journey feel heavier. How are you thinking about keeping that experience simple for {{company}} as expectations keep rising?
 
 ${CTA}
 
@@ -239,11 +229,22 @@ ${SIGN_OFF}`;
 }
 
 async function generateCompleteDraftBody(article: any): Promise<string> {
+  const prompt = buildPrompt(article);
+
   try {
-    const raw = await callGemini(buildPrompt(article));
+    const raw = await callGemini(prompt);
     return normalizeDraftBody(raw);
-  } catch (error) {
-    console.warn("Gemini draft rejected; using fallback draft", (error as Error).message);
+  } catch (firstError) {
+    console.warn("Gemini draft rejected; retrying once", (firstError as Error).message);
+  }
+
+  try {
+    const retryRaw = await callGemini(`${prompt}
+
+The previous attempt failed validation. Rewrite it from scratch. Do not copy or truncate the headline. Do not use ellipses. Keep the exact greeting, CTA, and sign-off.`);
+    return normalizeDraftBody(retryRaw);
+  } catch (secondError) {
+    console.warn("Gemini retry rejected; using fallback draft", (secondError as Error).message);
     return buildFallbackDraftBody(article);
   }
 }
@@ -257,11 +258,9 @@ function buildPrompt(article: any): string {
     ? article.target_industries.filter(Boolean).join(", ")
     : "";
 
-  return `You write highly personalised, research-first cold outreach emails for Stripe SDRs, following Stripe's prospecting-email-writer style.
+  return `You write concise, high-quality cold prospecting emails for Stripe SDRs.
 
 Generate one plain-text email body using this article as the hook, the Stripe Play as the commercial angle, and the proof point as light social proof.
-
-The email should feel like a sharp SDR wrote it after reading a useful market signal. It should not feel like analyst copy, product marketing, or a generic AI template.
 
 ARTICLE
 Title: ${article.title}
@@ -291,13 +290,13 @@ Output rules:
 Hard rules:
 - The email body must start exactly with: Hey {{first_name}},
 - Use {{company}} as the prospect company merge tag where useful. Do not invent a specific prospect company.
-- Opening sentence must frame the article as a market signal, not as something the recipient has read.
+- Opening sentence must frame the article as a news hook, not as something the recipient has read.
 - Do not say "I saw", "I read", "I noticed", "you may have seen", or anything that assumes the recipient has seen the article.
-- Good opener pattern: "A ${article.source ?? "industry"} piece highlighted..." or "The ${article.source ?? "industry"} story on... is a useful signal."
+- Good opener pattern: "A recent ${article.source ?? "industry"} piece highlighted..."
 - Opening sentence must reference the specific news event: company, event, and product/context from the article. No vague openers.
-- Let the observation breathe for a full sentence before connecting to pain. Do not pivot immediately.
-- Body must be 2-3 short sentences before the CTA.
-- Connect the news to prospect pain, but make it sound like spoken thought.
+- Let the observation breathe for a full sentence before connecting to pain.
+- Body must be 2-3 sentences before the CTA.
+- Connect the news to prospect pain.
 - Weave the proof point naturally. Paraphrase it; do not quote it verbatim.
 - Build toward one DIQ.
 - DIQ must be one open-ended question, genuinely curious, not yes/no, not a pitch, no Stripe product names, and connected to the pain.
@@ -306,11 +305,9 @@ Hard rules:
 Talk soon,
 {{sender_name}}
 - Total length must be 80-100 words excluding the sign-off.
-- Tone: conversational, warm, peer-like, and specific. Short sentences. Natural rhythm.
-- Use human phrasing from the prospecting-email-writer style: "The flip side is...", "That gets harder when...", "Which is impressive, and also where...", "But the more X, the messier Y tends to get".
-- Avoid analyst language such as "market signal", "strategic advantage", "growth engine", "as you scale", "positions them", "operational efficiency", "digital transformation", "evolving landscape", or "serious milestone".
-- Avoid corporate phrases like "seamless", "at scale", "leveraging", "robust", "innovative", "optimise", "enhance", and "solution" unless they are unavoidable.
-- Do not sound like this could be sent to any company. If it feels templated, rewrite it.
+- Tone: conversational, warm, knowledgeable peer, short sentences.
+- Use natural connectors like “But the more X, the messier Y gets”.
+- No analyst language.
 - No filler.
 - No em dashes as sentence connectors.
 - Do not mention Stripe product names in the body.

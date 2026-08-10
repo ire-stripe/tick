@@ -117,7 +117,6 @@ export const TERRITORIES: Territory[] = [
     rss_feeds: [
       "https://fintechnordics.com/feed/",
       "https://arcticstartup.com/feed/",
-      "https://siliconcanals.com/feed/",
       "https://tech.eu/feed",
       "https://www.eu-startups.com/feed/",
     ],
@@ -131,7 +130,6 @@ export const TERRITORIES: Territory[] = [
     lng: 4.5,
     active: true,
     rss_feeds: [
-      "https://siliconcanals.com/feed/",
       "https://tech.eu/feed",
       "https://www.eu-startups.com/feed/",
       "https://www.emerce.nl/feed",
