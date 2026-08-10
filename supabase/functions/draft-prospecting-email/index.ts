@@ -7,7 +7,7 @@ const GOOGLE_SERVICE_ACCOUNT_JSON = Deno.env.get("GOOGLE_SERVICE_ACCOUNT_JSON")!
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
 
-const PROMPT_VERSION = "v5";
+const PROMPT_VERSION = "v6";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -222,9 +222,9 @@ function buildFallbackDraftBody(article: any): string {
 
   const body = `Hey {{first_name}},
 
-A recent ${source} piece highlighted ${hook}. The signal is relevant because shifts like this can create pressure for {{company}} to make customer onboarding, conversion, and risk controls feel seamless while the operating model gets more complex.
+A ${source} piece highlighted ${hook}. It is a good reminder that moments like this usually create a messy middle for teams at {{company}}.
 
-A comparable company used modern financial infrastructure to improve onboarding trust at scale, which feels relevant here. How are you thinking about turning this kind of market shift into a cleaner customer experience without adding operational drag?
+Customers still expect the experience to feel simple, even when onboarding, conversion, and risk checks get more complex behind the scenes. A comparable company improved onboarding trust in a high-volume flow, which feels relevant here. How are you thinking about keeping that experience clean without adding more operational drag?
 
 ${CTA}
 
@@ -257,9 +257,11 @@ function buildPrompt(article: any): string {
     ? article.target_industries.filter(Boolean).join(", ")
     : "";
 
-  return `You write concise, high-quality cold prospecting emails for Stripe SDRs.
+  return `You write highly personalised, research-first cold outreach emails for Stripe SDRs, following Stripe's prospecting-email-writer style.
 
 Generate one plain-text email body using this article as the hook, the Stripe Play as the commercial angle, and the proof point as light social proof.
+
+The email should feel like a sharp SDR wrote it after reading a useful market signal. It should not feel like analyst copy, product marketing, or a generic AI template.
 
 ARTICLE
 Title: ${article.title}
@@ -291,11 +293,11 @@ Hard rules:
 - Use {{company}} as the prospect company merge tag where useful. Do not invent a specific prospect company.
 - Opening sentence must frame the article as a market signal, not as something the recipient has read.
 - Do not say "I saw", "I read", "I noticed", "you may have seen", or anything that assumes the recipient has seen the article.
-- Good opener pattern: "A recent ${article.source ?? "industry"} piece highlighted..."
+- Good opener pattern: "A ${article.source ?? "industry"} piece highlighted..." or "The ${article.source ?? "industry"} story on... is a useful signal."
 - Opening sentence must reference the specific news event: company, event, and product/context from the article. No vague openers.
-- Let the observation breathe for a full sentence before connecting to pain.
-- Body must be 2-3 sentences before the CTA.
-- Connect the news to prospect pain.
+- Let the observation breathe for a full sentence before connecting to pain. Do not pivot immediately.
+- Body must be 2-3 short sentences before the CTA.
+- Connect the news to prospect pain, but make it sound like spoken thought.
 - Weave the proof point naturally. Paraphrase it; do not quote it verbatim.
 - Build toward one DIQ.
 - DIQ must be one open-ended question, genuinely curious, not yes/no, not a pitch, no Stripe product names, and connected to the pain.
@@ -304,9 +306,11 @@ Hard rules:
 Talk soon,
 {{sender_name}}
 - Total length must be 80-100 words excluding the sign-off.
-- Tone: conversational, warm, knowledgeable peer, short sentences.
-- Use natural connectors like “But the more X, the messier Y gets”.
-- No analyst language.
+- Tone: conversational, warm, peer-like, and specific. Short sentences. Natural rhythm.
+- Use human phrasing from the prospecting-email-writer style: "The flip side is...", "That gets harder when...", "Which is impressive, and also where...", "But the more X, the messier Y tends to get".
+- Avoid analyst language such as "market signal", "strategic advantage", "growth engine", "as you scale", "positions them", "operational efficiency", "digital transformation", "evolving landscape", or "serious milestone".
+- Avoid corporate phrases like "seamless", "at scale", "leveraging", "robust", "innovative", "optimise", "enhance", and "solution" unless they are unavoidable.
+- Do not sound like this could be sent to any company. If it feels templated, rewrite it.
 - No filler.
 - No em dashes as sentence connectors.
 - Do not mention Stripe product names in the body.

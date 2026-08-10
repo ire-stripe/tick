@@ -47,6 +47,29 @@ function formatEmail(draft: EmailDraft) {
   return `Subject: ${draft.subject}\n\n${draft.body}`;
 }
 
+function emailBodyForCopy(draft: EmailDraft) {
+  return draft.body.replace(/\r\n/g, "\n").trim();
+}
+
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+function emailBodyHtmlForCopy(draft: EmailDraft) {
+  return emailBodyForCopy(draft)
+    .split(/\n{2,}/)
+    .map((paragraph) => {
+      const html = escapeHtml(paragraph.trim()).replace(/\n/g, "<br>");
+      return `<p style="margin:0 0 14px 0;">${html}</p>`;
+    })
+    .join("");
+}
+
 export const StoryCard = ({
   story,
   showListen,
@@ -116,7 +139,24 @@ export const StoryCard = ({
   const handleCopyEmail = async () => {
     if (!draft) return;
 
-    await navigator.clipboard.writeText(formatEmail(draft));
+    const plainText = emailBodyForCopy(draft);
+    const html = emailBodyHtmlForCopy(draft);
+
+    try {
+      if ("ClipboardItem" in window) {
+        await navigator.clipboard.write([
+          new ClipboardItem({
+            "text/html": new Blob([html], { type: "text/html" }),
+            "text/plain": new Blob([plainText], { type: "text/plain" }),
+          }),
+        ]);
+      } else {
+        await navigator.clipboard.writeText(plainText);
+      }
+    } catch (_error) {
+      await navigator.clipboard.writeText(plainText);
+    }
+
     setCopied(true);
 
     // Fire-and-forget analytics. Copy should still succeed even if tracking fails.
@@ -287,7 +327,7 @@ export const StoryCard = ({
 
               <div className="mt-4 flex shrink-0 justify-end">
                 <Button onClick={handleCopyEmail} className="h-9 text-sm">
-                  {copied ? "Copied" : "Copy email"}
+                  {copied ? "Copied" : "Copy body"}
                 </Button>
               </div>
             </div>

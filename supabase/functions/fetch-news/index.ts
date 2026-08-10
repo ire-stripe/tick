@@ -57,6 +57,37 @@ function isSiftedUrl(url: string): boolean {
   }
 }
 
+function isNonArticleContent(input: { title?: string | null; url?: string | null; description?: string | null }): boolean {
+  const title = (input.title ?? "").toLowerCase();
+  const description = (input.description ?? "").toLowerCase();
+  const hay = `${title}\n${description}`;
+
+  if (/\b(webinar|join this webinar|register for this webinar|sign up for this webinar)\b/i.test(hay)) {
+    return true;
+  }
+
+  if (/\b(register now|join us for|live@|conference|summit|roundtable)\b/i.test(hay)) {
+    return true;
+  }
+
+  try {
+    const parsed = new URL(input.url ?? "");
+    const path = parsed.pathname.toLowerCase();
+
+    return [
+      "/event-info/",
+      "/events/",
+      "/event/",
+      "/webinar/",
+      "/webinars/",
+      "/conference/",
+      "/conferences/",
+    ].some((segment) => path.includes(segment));
+  } catch {
+    return false;
+  }
+}
+
 // ── RSS parsing (tolerant regex — no external deps) ────────────────────────
 const NAMED_ENTITIES: Record<string, string> = {
   amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " ",
@@ -111,6 +142,10 @@ function parseRss(xml: string, sourceHost: string): Array<Omit<FetchedArticle, "
       extractTag(block, "updated") ||
       new Date().toISOString();
     if (!title || !link) continue;
+    if (isNonArticleContent({ title, url: link, description })) {
+      console.warn(`RSS ${sourceHost} skipped non-article content: ${title}`);
+      continue;
+    }
     if (!hasArticlePath(link)) {
       console.warn(`RSS ${sourceHost} skipped homepage-only URL: ${link}`);
       continue;
@@ -220,6 +255,15 @@ async function fetchGNews(country: string): Promise<Array<Omit<FetchedArticle, "
       .filter((a: any) => {
         const host = (() => { try { return new URL(a.url).hostname; } catch { return ""; } })();
         return host && !NON_EMEA_HOST_RE.test(host);
+      })
+      .filter((a: any) => {
+        const nonArticle = isNonArticleContent({
+          title: a.title,
+          url: a.url,
+          description: a.description ?? a.content,
+        });
+        if (nonArticle) console.warn(`GNews ${country} skipped non-article content: ${a.title}`);
+        return !nonArticle;
       })
       .filter((a: any) => {
         const ok = hasArticlePath(a.url);
@@ -718,6 +762,10 @@ Deno.serve(async (req) => {
         }
         const resolvedUrl = await resolveArticleUrl(a.url);
         if (!resolvedUrl) return null;
+        if (isNonArticleContent({ title: a.title, url: resolvedUrl, description: a.description })) {
+          console.log(`skip (non-article): ${a.title.slice(0, 80)}`);
+          return null;
+        }
 
         const skipFullText = isSiftedUrl(resolvedUrl);
         const [summary, fullText] = await Promise.all([
